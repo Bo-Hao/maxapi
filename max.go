@@ -14,25 +14,8 @@ import (
 )
 
 func (Mc *MaxClient) Run() {
-	//var wg sync.WaitGroup
 	go func() {
 		Mc.SubscribeWS()
-	}()
-
-	go func() {
-		for {
-			select {
-			case <-Mc.ctx.Done():
-				fmt.Println("Done")
-				return
-			default:
-				time.Sleep(5 * time.Second)
-				fmt.Println("Local Balance", Mc.LocalBalance)
-				fmt.Println("Local Orders", Mc.LimitOrders)
-				Mc.cancelFunc()
-			}
-
-		}
 	}()
 }
 
@@ -40,7 +23,7 @@ func (Mc *MaxClient) RoutineChecking() {
 	go func() {
 		fmt.Println("6 second to cancel")
 		time.Sleep(6 * time.Second)
-		Mc.cancelFunc()
+		Mc.CancelFunc()
 	}()
 
 }
@@ -63,7 +46,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 		apiSecret: APISECRET,
 
 		ctx:        ctx,
-		cancelFunc: cancel,
+		CancelFunc: cancel,
 
 		ApiClient: apiclient,
 
@@ -81,7 +64,7 @@ type MaxClient struct {
 	apiSecret string
 
 	ctx        context.Context
-	cancelFunc context.CancelFunc
+	CancelFunc context.CancelFunc
 
 	// web socket client
 	WsClient WebsocketClient
