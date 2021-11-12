@@ -23,7 +23,7 @@ func (Mc *MaxClient) RoutineChecking() {
 	go func() {
 		fmt.Println("6 second to cancel")
 		time.Sleep(6 * time.Second)
-		Mc.CancelFunc()
+		Mc.cancelFunc()
 	}()
 
 }
