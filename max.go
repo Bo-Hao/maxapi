@@ -46,7 +46,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 		apiSecret: APISECRET,
 
 		ctx:        ctx,
-		CancelFunc: cancel,
+		cancelFunc: cancel,
 
 		ApiClient: apiclient,
 
@@ -59,12 +59,21 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 	}
 }
 
+type ShutFunction func()
+
+func (Mc *MaxClient) ShutDown() {
+	Mc.CancelAllOrders()
+	Mc.cancelFunc()
+}
+
+
+
 type MaxClient struct {
 	apiKey    string
 	apiSecret string
 
 	ctx        context.Context
-	CancelFunc context.CancelFunc
+	cancelFunc context.CancelFunc
 
 	// web socket client
 	WsClient WebsocketClient
