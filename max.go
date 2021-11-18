@@ -17,15 +17,13 @@ func (Mc *MaxClient) Run() {
 	go func() {
 		Mc.SubscribeWS()
 	}()
-}
 
-func (Mc *MaxClient) RoutineChecking() {
 	go func() {
-		fmt.Println("6 second to cancel")
-		time.Sleep(6 * time.Second)
-		Mc.cancelFunc()
+		Mc.BalanceGlobal2Local()
+		Mc.GetOrders()
+		time.Sleep(60 * time.Second)
+		
 	}()
-
 }
 
 func NewMaxClient(APIKEY, APISECRET string) MaxClient {
@@ -50,8 +48,9 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 
 		ApiClient: apiclient,
 
-		LimitOrders: map[int32]WsOrder{},
-		DoneOrders:  map[int32]WsOrder{},
+		LimitOrders:         map[int32]WsOrder{},
+		FilledOrders:        map[int32]WsOrder{},
+		PartialFilledOrders: map[int32]WsOrder{},
 
 		Markets:      markets,
 		LocalBalance: map[string]float64{},
@@ -59,14 +58,10 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 	}
 }
 
-type ShutFunction func()
-
 func (Mc *MaxClient) ShutDown() {
 	Mc.CancelAllOrders()
 	Mc.cancelFunc()
 }
-
-
 
 type MaxClient struct {
 	apiKey    string
@@ -75,16 +70,26 @@ type MaxClient struct {
 	ctx        context.Context
 	cancelFunc context.CancelFunc
 
+	// CXMM parameters
+	BaseOrderUnit string
+
+	// exchange information
+	ExchangeInfo ExchangeInfo
+
 	// web socket client
 	WsClient WebsocketClient
+
 	// api client
 	ApiClient *APIClient
 
-	// local orders record
+	// limit unfilled orders
 	LimitOrders      map[int32]WsOrder
 	LimitOrdersMutex sync.RWMutex
-	DoneOrders       map[int32]WsOrder
-	DoneOrdersMutex  sync.RWMutex
+
+	// filled orders
+	FilledOrders        map[int32]WsOrder
+	PartialFilledOrders map[int32]WsOrder
+	FilledOrdersMutex   sync.RWMutex
 
 	// All markets pairs
 	Markets []Market
@@ -97,6 +102,12 @@ type MaxClient struct {
 	LocalBalanceMutex sync.RWMutex
 	LocalLocked       map[string]float64 // locked currency balance
 	LocalLockedMutex  sync.RWMutex
+}
+
+type ExchangeInfo struct {
+	MinOrderUnit float64
+	LimitApi     int
+	CurrentNApi  int
 }
 
 type WebsocketClient struct {
@@ -382,14 +393,13 @@ func (Mc *MaxClient) BalanceGlobal2Local() error {
 	return nil
 }
 
-func (Mc *MaxClient) GetOrders(market string) ([]WsOrder, error) {
+func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, nil)
 	if err != nil {
-		fmt.Println(err)
-		return []WsOrder{}, errors.New("fail to get order list")
+		return map[int32]WsOrder{}, errors.New("fail to get order list")
 	}
 
-	wsOrders := make([]WsOrder, 0, len(orders))
+	wsOrders := map[int32]WsOrder{}
 	for i := 0; i < len(orders); i++ {
 		wsOrders = append(wsOrders, WsOrder(orders[i]))
 	}
@@ -408,7 +418,7 @@ func (Mc *MaxClient) OrderGlobal2Local() error {
 		marketId := markets[i].Id
 		wsOrders, err := Mc.GetOrders(marketId)
 		if err != nil {
-			errMsg := fmt.Sprintf("fail tp get %s orders", marketId)
+			errMsg := fmt.Sprintf("fail to get %s orders", marketId)
 			return errors.New(errMsg)
 		}
 		for j := 0; j < len(wsOrders); j++ {
@@ -422,24 +432,37 @@ func (Mc *MaxClient) OrderGlobal2Local() error {
 	return nil
 }
 
-func (Mc *MaxClient) DetectDoneOrders() map[string]HedgingOrder {
+func (Mc *MaxClient) DetectFilledOrders() map[string]HedgingOrder {
 	hedgingOrders := map[string]HedgingOrder{}
-	if len(Mc.DoneOrders) == 0 {
+	if len(Mc.FilledOrders) == 0 {
 		return hedgingOrders
 	}
 
-	Mc.DoneOrdersMutex.Lock()
-	defer Mc.DoneOrdersMutex.Unlock()
+	Mc.FilledOrdersMutex.Lock()
+	defer Mc.FilledOrdersMutex.Unlock()
 
-	for _, order := range Mc.DoneOrders {
+	for _, order := range Mc.FilledOrders {
+		preEv := 0.
+		if _, in := Mc.PartialFilledOrders[order.Id]; in {
+			f, err := strconv.ParseFloat(Mc.PartialFilledOrders[order.Id].ExecutedVolume, 64)
+			if err != nil {
+				log.Print("fail to convert previous executed volume: ", err)
+			} else {
+				preEv = f
+			}
+		}
+
 		market := order.Market
 		price, err := strconv.ParseFloat(order.Price, 64)
 		if err != nil {
 			log.Print(err)
 		}
-		volume, err := strconv.ParseFloat(order.Volume, 64)
+		volume, err := strconv.ParseFloat(order.ExecutedVolume, 64)
 		if err != nil {
 			log.Print(err)
+		}
+		if volume > preEv {
+			volume = volume - preEv
 		}
 
 		s := 1.
@@ -453,14 +476,28 @@ func (Mc *MaxClient) DetectDoneOrders() map[string]HedgingOrder {
 			hegingOrder.PartialProfit += price * volume * s
 			hegingOrder.TotalVolume += volume * s
 		} else {
+			base, quote, err := Mc.checkBaseQuote(market)
+			if err != nil {
+				log.Print(err)
+			}
 			ho := HedgingOrder{
 				Market:        market,
+				Base: base,
+				Quote: quote,
 				PartialProfit: price * volume * s,
 				TotalVolume:   volume * s,
 				Timestamp:     timestamp,
 			}
 			hedgingOrders[market] = ho
 		}
+
+		// dealing with partial filled orders
+		if order.State == "done" {
+			delete(Mc.PartialFilledOrders, order.Id)
+		} else {
+			Mc.PartialFilledOrders[order.Id] = order
+		}
+
 	}
 
 	for _, hedgingOrder := range hedgingOrders {
@@ -479,13 +516,15 @@ func (Mc *MaxClient) DetectDoneOrders() map[string]HedgingOrder {
 		}
 	}
 
-	Mc.DoneOrders = map[int32]WsOrder{}
+	Mc.FilledOrders = map[int32]WsOrder{}
 	return hedgingOrders
 }
 
 type HedgingOrder struct {
 	// order
 	Market        string
+	Base          string
+	Quote         string
 	PartialProfit float64
 	TotalVolume   float64
 	Timestamp     int32

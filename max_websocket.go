@@ -206,8 +206,8 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 
 	Mc.LimitOrdersMutex.Lock()
 	defer Mc.LimitOrdersMutex.Unlock()
-	Mc.DoneOrdersMutex.Lock()
-	defer Mc.DoneOrdersMutex.Unlock()
+	Mc.FilledOrdersMutex.Lock()
+	defer Mc.FilledOrdersMutex.Unlock()
 
 	for i := 0; i < len(wsOrders); i++ {
 		if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
@@ -216,16 +216,18 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 		} else {
 			switch wsOrders[i].State {
 			case "cancel":
+				fmt.Println("order canceled: ", wsOrders[i])
 				delete(Mc.LimitOrders, wsOrders[i].Id)
 			case "done":
-				Mc.DoneOrders[wsOrders[i].Id] = wsOrders[i]
+				fmt.Println("order done: ", wsOrders[i])
+				Mc.FilledOrders[wsOrders[i].Id] = wsOrders[i]
 				delete(Mc.LimitOrders, wsOrders[i].Id)
 			default:
-
-				fmt.Println(wsOrders[i], " waiting...")
+				fmt.Println("order partial fill: ", wsOrders[i])
 				if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
 					Mc.LimitOrders[wsOrders[i].Id] = wsOrders[i]
 				}
+				Mc.FilledOrders[wsOrders[i].Id] = wsOrders[i]
 			}
 		}
 	}
@@ -310,11 +312,11 @@ func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
 
 	Mc.LimitOrders = trackedWsOrders
 
-	Mc.DoneOrdersMutex.Lock()
-	defer Mc.DoneOrdersMutex.Unlock()
+	Mc.FilledOrdersMutex.Lock()
+	defer Mc.FilledOrdersMutex.Unlock()
 	for id, odr := range untrackedWsOrders {
-		if _, ok := Mc.DoneOrders[id]; !ok {
-			Mc.DoneOrders[id] = odr
+		if _, ok := Mc.FilledOrders[id]; !ok {
+			Mc.FilledOrders[id] = odr
 		}
 	}
 
