@@ -4,8 +4,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
+	"os/signal"
 	"strconv"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -18,7 +21,7 @@ func (Mc *MaxClient) Run() {
 	}()
 
 	go func() {
-		if Mc.shuting{
+		if Mc.shuting {
 			Mc.ShutDown()
 		}
 
@@ -35,15 +38,23 @@ func (Mc *MaxClient) Run() {
 	}()
 
 	go func() {
-		if Mc.shuting{
+		if Mc.shuting {
 			Mc.ShutDown()
 		}
-		
+
 		err := Mc.MarketsGolval2Local()
-		if err != nil{
+		if err != nil {
 			LogWarningToDailyLogFile(err, ". in routine checking")
 		}
-		time.Sleep(12*time.Hour)
+		time.Sleep(12 * time.Hour)
+	}()
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		Mc.ShutDown()
+		os.Exit(1)
 	}()
 
 }
@@ -67,7 +78,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 
 		ctx:        ctx,
 		cancelFunc: cancel,
-		shuting: false,
+		shuting:    false,
 
 		ApiClient: apiclient,
 
@@ -82,9 +93,11 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 }
 
 func (Mc *MaxClient) ShutDown() {
+	fmt.Println("Shut Down the program")
 	Mc.CancelAllOrders()
 	Mc.cancelFunc()
 	Mc.shuting = true
+	os.Exit(1)
 
 }
 
@@ -94,7 +107,7 @@ type MaxClient struct {
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
-	shuting bool
+	shuting    bool
 
 	// CXMM parameters
 	BaseOrderUnit string
