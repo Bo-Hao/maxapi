@@ -237,52 +237,10 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 // Trade
 //	trade_snapshot
 func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error {
-	snapshotTrades := make([]Trade, 0, 100)
-	switch reflect.TypeOf(msgMap["t"]).Kind() {
-	case reflect.Slice:
-		s := reflect.ValueOf(msgMap["t"])
-		for i := 0; i < s.Len(); i++ {
-			wsTrade := s.Index(i).Interface().(map[string]interface{})
-
-			id, err := strconv.Atoi(wsTrade["i"].(string))
-			if err != nil {
-				return errors.New("fail to convert id from string to int")
-			}
-
-			T, err := strconv.Atoi(wsTrade["T"].(string))
-			if err != nil {
-				return errors.New("fail to convert T from string to int")
-			}
-
-			side, err := sellbuyTransfer(wsTrade["sd"].(string))
-			if err != nil {
-				return err
-			}
-			maker := true
-			if wsTrade["m"] == "false" {
-				maker = false
-			}
-
-			newTrade := Trade{
-				Id:          int32(id),
-				Price:       wsTrade["p"].(string),
-				Volume:      wsTrade["v"].(string),
-				Market:      wsTrade["M"].(string),
-				Timestamp:   int32(T),
-				Side:        side,
-				Fee:         wsTrade["f"].(string),
-				FeeCurrency: wsTrade["fc"].(string),
-				Maker:       maker,
-			}
-			snapshotTrades = append(snapshotTrades, newTrade)
-		} // end for
-	} // end switch
-
-	// checking trades situation.
-	/* err := Mc.trackingTrades(snapshotTrades)
-	if err != nil {
-		log.Print("fail to check the trades during disconnection")
-	} */
+	jsonbody, _ := json.Marshal(msgMap["t"])
+	var newTrades []Trade
+	json.Unmarshal(jsonbody, &newTrades)
+	
 
 	return nil
 }
@@ -325,60 +283,23 @@ func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
 
 //	trade_update
 func (Mc *MaxClient) parseTradeUpdateMsg(msgMap map[string]interface{}) error {
+	jsonbody, _ := json.Marshal(msgMap["t"])
 	var newTrades []Trade
-	switch reflect.TypeOf(msgMap["t"]).Kind() {
-	case reflect.Slice:
-		s := reflect.ValueOf(msgMap["t"])
-		for i := 0; i < s.Len(); i++ {
-			wsTrade := s.Index(i).Interface().(map[string]interface{})
-			id, err := strconv.Atoi(wsTrade["i"].(string))
-			if err != nil {
-				return errors.New("fail to convert id from string to int")
-			}
-
-			T, err := strconv.Atoi(wsTrade["T"].(string))
-			if err != nil {
-				return errors.New("fail to convert T from string to int")
-			}
-
-			side, err := sellbuyTransfer(wsTrade["sd"].(string))
-			if err != nil {
-				return err
-			}
-			maker := true
-			if wsTrade["m"] == "false" {
-				maker = false
-			}
-
-			newTrade := Trade{
-				Id:          int32(id),
-				Price:       wsTrade["p"].(string),
-				Volume:      wsTrade["v"].(string),
-				Market:      wsTrade["M"].(string),
-				Timestamp:   int32(T),
-				Side:        side,
-				Fee:         wsTrade["f"].(string),
-				FeeCurrency: wsTrade["fc"].(string),
-				Maker:       maker,
-			}
-			newTrades = append(newTrades, newTrade)
-		} // end for
-	} // end switch
-
-	//Mc.UnhedgedTrades = append(Mc.UnhedgedTrades, newTrades...)
+	json.Unmarshal(jsonbody, &newTrades)
+	
 	return nil
 }
 
 type Trade struct {
-	Id          int32
-	Price       string
-	Volume      string
-	Market      string
-	Timestamp   int32
-	Side        string
-	Fee         string
-	FeeCurrency string
-	Maker       bool
+	Id          int32  `json:"i,omitempty"`
+	Price       string `json:"p,omitempty"`
+	Volume      string `json:"v,omitempty"`
+	Market      string `json:"M,omitempty"`
+	Timestamp   int32  `json:"T,omitempty"`
+	Side        string `json:"sd,omitempty"`
+	Fee         string `json:"f,omitempty"`
+	FeeCurrency string `json:"fc,omitempty"`
+	Maker       bool   `json:"m,omitempty"`
 }
 
 // Account
