@@ -141,7 +141,7 @@ type MaxClient struct {
 	LocalBalance      map[string]float64 // currency balance
 	LocalBalanceMutex sync.RWMutex
 	LocalLocked       map[string]float64 // locked currency balance
-	LocalLockedMutex  sync.RWMutex
+	
 }
 
 type ExchangeInfo struct {
@@ -392,13 +392,60 @@ func (Mc *MaxClient) GetAccount() (Member, error) {
 	return member, nil
 }
 
-func (Mc *MaxClient) GetBalance() ([]Account, error) {
+func (Mc *MaxClient) GetBalance() (map[string]float64, map[string]float64, error) {
+	localbalance := map[string]float64{}
+	locallocked := map[string]float64{}
+	
 	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(Mc.ctx, Mc.apiKey, Mc.apiSecret)
 	if err != nil {
 		fmt.Println(err)
-		return []Account{}, errors.New("fail to get balance")
+		return map[string]float64{}, map[string]float64{}, errors.New("fail to get balance")
 	}
-	return member.Accounts, nil
+	Accounts := member.Accounts
+	for i := 0; i < len(Accounts); i++ {
+		currency := Accounts[i].Currency
+		balance, err := strconv.ParseFloat(Accounts[i].Balance, 64)
+		if err != nil {
+			LogFatalToDailyLogFile(err)
+			return map[string]float64{}, map[string]float64{}, errors.New("fail to parse balance to float64")
+		}
+		locked, err := strconv.ParseFloat(Accounts[i].Locked, 64)
+		if err != nil {
+			LogFatalToDailyLogFile(err)
+			return map[string]float64{}, map[string]float64{}, errors.New("fail to parse locked balance to float64")
+		}
+
+		localbalance[currency] = balance
+		locallocked[currency] = locked
+	}
+
+	return localbalance, locallocked, nil
+}
+
+func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
+	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, nil)
+	if err != nil {
+		return map[int32]WsOrder{}, errors.New("fail to get order list")
+	}
+
+	wsOrders := map[int32]WsOrder{}
+	for i := 0; i < len(orders); i++ {
+		order := WsOrder(orders[i])
+		wsOrders[order.Id] = order
+	}
+
+	return wsOrders, nil
+}
+
+func (Mc *MaxClient) MarketsGolval2Local() error {
+	Mc.MarketsMutex.Lock()
+	defer Mc.MarketsMutex.Unlock()
+	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(Mc.ctx)
+	if err != nil {
+		return errors.New("fail to get market")
+	}
+	Mc.Markets = markets
+	return nil
 }
 
 // GET account and sent the balance to the local balance
@@ -429,32 +476,6 @@ func (Mc *MaxClient) BalanceGlobal2Local() error {
 		Mc.LocalLocked[currency] = locked
 	}
 
-	return nil
-}
-
-func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
-	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, nil)
-	if err != nil {
-		return map[int32]WsOrder{}, errors.New("fail to get order list")
-	}
-
-	wsOrders := map[int32]WsOrder{}
-	for i := 0; i < len(orders); i++ {
-		order := WsOrder(orders[i])
-		wsOrders[order.Id] = order
-	}
-
-	return wsOrders, nil
-}
-
-func (Mc *MaxClient) MarketsGolval2Local() error {
-	Mc.MarketsMutex.Lock()
-	defer Mc.MarketsMutex.Unlock()
-	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(Mc.ctx)
-	if err != nil {
-		return errors.New("fail to get market")
-	}
-	Mc.Markets = markets
 	return nil
 }
 
