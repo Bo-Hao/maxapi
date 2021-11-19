@@ -18,11 +18,34 @@ func (Mc *MaxClient) Run() {
 	}()
 
 	go func() {
-		Mc.BalanceGlobal2Local()
+		if Mc.shuting{
+			Mc.ShutDown()
+		}
 
+		err := Mc.BalanceGlobal2Local()
+		if err != nil {
+			LogWarningToDailyLogFile(err, ". in routine checking")
+		}
+
+		err = Mc.OrderGlobal2Local()
+		if err != nil {
+			LogWarningToDailyLogFile(err, ". in routine checking")
+		}
 		time.Sleep(60 * time.Second)
-
 	}()
+
+	go func() {
+		if Mc.shuting{
+			Mc.ShutDown()
+		}
+		
+		err := Mc.MarketsGolval2Local()
+		if err != nil{
+			LogWarningToDailyLogFile(err, ". in routine checking")
+		}
+		time.Sleep(12*time.Hour)
+	}()
+
 }
 
 func NewMaxClient(APIKEY, APISECRET string) MaxClient {
@@ -44,6 +67,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 
 		ctx:        ctx,
 		cancelFunc: cancel,
+		shuting: false,
 
 		ApiClient: apiclient,
 
@@ -60,6 +84,8 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 func (Mc *MaxClient) ShutDown() {
 	Mc.CancelAllOrders()
 	Mc.cancelFunc()
+	Mc.shuting = true
+
 }
 
 type MaxClient struct {
@@ -68,6 +94,7 @@ type MaxClient struct {
 
 	ctx        context.Context
 	cancelFunc context.CancelFunc
+	shuting bool
 
 	// CXMM parameters
 	BaseOrderUnit string
@@ -196,7 +223,6 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 
 	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(Mc.ctx, Mc.apiKey, Mc.apiSecret, params)
 	if err != nil {
-		fmt.Println(err)
 		return []WsOrder{}, errors.New("fail to cancel orders")
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))

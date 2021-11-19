@@ -212,18 +212,18 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 	for i := 0; i < len(wsOrders); i++ {
 		if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
 			Mc.LimitOrders[wsOrders[i].Id] = wsOrders[i]
-			fmt.Println("new order arrived: ", wsOrders[i])
+			//fmt.Println("new order arrived: ", wsOrders[i])
 		} else {
 			switch wsOrders[i].State {
 			case "cancel":
-				fmt.Println("order canceled: ", wsOrders[i])
+				//fmt.Println("order canceled: ", wsOrders[i])
 				delete(Mc.LimitOrders, wsOrders[i].Id)
 			case "done":
-				fmt.Println("order done: ", wsOrders[i])
+				//fmt.Println("order done: ", wsOrders[i])
 				Mc.FilledOrders[wsOrders[i].Id] = wsOrders[i]
 				delete(Mc.LimitOrders, wsOrders[i].Id)
 			default:
-				fmt.Println("order partial fill: ", wsOrders[i])
+				//fmt.Println("order partial fill: ", wsOrders[i])
 				if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
 					Mc.LimitOrders[wsOrders[i].Id] = wsOrders[i]
 				}
