@@ -96,6 +96,7 @@ func (Mc *MaxClient) ShutDown() {
 	Mc.CancelAllOrders()
 	Mc.cancelFunc()
 	Mc.shuting = true
+	time.Sleep(3*time.Second)
 	os.Exit(1)
 
 }

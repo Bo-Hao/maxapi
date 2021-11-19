@@ -40,7 +40,6 @@ func (Mc *MaxClient) SubscribeWS() {
 	for {
 		select {
 		case <-Mc.ctx.Done():
-			fmt.Println("stop")
 			Mc.WsClient.OnErr = false
 			Mc.ShutDown()
 			return
