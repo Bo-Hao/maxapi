@@ -41,8 +41,8 @@ func (Mc *MaxClient) SubscribeWS() {
 		select {
 		case <-Mc.ctx.Done():
 			fmt.Println("stop")
-			Mc.CancelAllOrders()
-			Mc.WsClient.Conn.Close()
+			Mc.WsClient.OnErr = false
+			Mc.ShutDown()
 			return
 		default:
 			if Mc.WsClient.Conn == nil {
@@ -330,7 +330,6 @@ func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
 		} // end for
 	} // end switch
 
-	fmt.Println("WS bottom:", Mc.LocalBalance)
 	return nil
 }
 
