@@ -171,7 +171,7 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
 
-	LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders.")
+	LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders by CancelAllOrders.")
 
 	// data update
 	// local balance update
@@ -201,7 +201,7 @@ func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
 		return WsOrder{}, errors.New("fail to cancel order" + strconv.Itoa(int(id)))
 	}
 
-	LogInfoToDailyLogFile("Cancel Order ", id, ".")
+	LogInfoToDailyLogFile("Cancel Order ", id, "by CancelOrder func.")
 
 	// data update
 	// local balance update
