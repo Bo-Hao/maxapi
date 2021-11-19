@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"log"
 	"reflect"
 	"strconv"
@@ -239,7 +238,6 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 	jsonbody, _ := json.Marshal(msgMap["t"])
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
-	
 
 	return nil
 }
@@ -285,7 +283,7 @@ func (Mc *MaxClient) parseTradeUpdateMsg(msgMap map[string]interface{}) error {
 	jsonbody, _ := json.Marshal(msgMap["t"])
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
-	
+
 	return nil
 }
 
