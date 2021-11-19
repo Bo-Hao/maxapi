@@ -19,18 +19,18 @@ func (Mc *MaxClient) SubscribeWS() {
 	var url string = "wss://max-stream.maicoin.com/ws"
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
-		log.Print(err)
+		LogFatalToDailyLogFile(err)
 	}
-	log.Println("Connected:", url)
+	LogInfoToDailyLogFile("Connected:", url)
 
 	subMsg, err := GetMaxSubscribePrivateMessage(Mc.apiKey, Mc.apiSecret)
 	if err != nil {
-		log.Print(errors.New("fail to construct subscribtion message"))
+		LogFatalToDailyLogFile(errors.New("fail to construct subscribtion message"))
 	}
 
 	err = conn.WriteMessage(websocket.TextMessage, subMsg)
 	if err != nil {
-		log.Print(errors.New("fail to subscribe websocket"))
+		LogFatalToDailyLogFile(errors.New("fail to subscribe websocket"))
 	}
 	Mc.WsClient.Conn = conn
 	Mc.WsClient.OnErr = false
@@ -48,21 +48,21 @@ func (Mc *MaxClient) SubscribeWS() {
 			if Mc.WsClient.Conn == nil {
 				Mc.WsClient.OnErr = true
 				message := "max websocket reconnecting"
-				log.Print(message)
+				LogInfoToDailyLogFile(message)
 			}
 
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
-				log.Println("read:", err)
+				LogErrorToDailyLogFile("read:", err)
 				Mc.WsClient.OnErr = true
 				message := "max websocket reconnecting"
-				log.Print(message)
+				LogInfoToDailyLogFile(message)
 			}
 
 			var msgMap map[string]interface{}
 			err = json.Unmarshal(msg, &msgMap)
 			if err != nil {
-				log.Print(err)
+				LogWarningToDailyLogFile(err)
 				Mc.WsClient.OnErr = true
 			}
 
@@ -70,7 +70,7 @@ func (Mc *MaxClient) SubscribeWS() {
 			if errh != nil {
 				Mc.WsClient.OnErr = true
 				message := "max websocket reconnecting"
-				log.Print(message)
+				LogInfoToDailyLogFile(message)
 			}
 			time.Sleep(1 * time.Second)
 		} // end select
@@ -142,13 +142,13 @@ func (Mc *MaxClient) handleMAXSocketMsg(msg []byte) error {
 	var msgMap map[string]interface{}
 	err := json.Unmarshal(msg, &msgMap)
 	if err != nil {
-		log.Print(err)
+		LogErrorToDailyLogFile(err)
 		return errors.New("fail to unmarshal message")
 	}
 
 	event, ok := msgMap["e"]
 	if !ok {
-		log.Print("there is no event in message")
+		LogWarningToDailyLogFile("there is no event in message")
 		return errors.New("fail to obtain message")
 	}
 
@@ -156,7 +156,7 @@ func (Mc *MaxClient) handleMAXSocketMsg(msg []byte) error {
 	var err2 error
 	switch event {
 	case "authenticated":
-		log.Print("websocket subscribtion authenticated")
+		LogInfoToDailyLogFile("websocket subscribtion authenticated")
 	case "order_snapshot":
 		err2 = Mc.parseOrderSnapshotMsg(msgMap)
 	case "trade_snapshot":

@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
 	"strconv"
 	"sync"
 	"time"
@@ -20,9 +19,9 @@ func (Mc *MaxClient) Run() {
 
 	go func() {
 		Mc.BalanceGlobal2Local()
-		Mc.GetOrders()
+
 		time.Sleep(60 * time.Second)
-		
+
 	}()
 }
 
@@ -36,7 +35,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 	// Get markets []Market
 	markets, _, err := apiclient.PublicApi.GetApiV2Markets(ctx)
 	if err != nil {
-		log.Print(err)
+		LogFatalToDailyLogFile(err)
 	}
 
 	return MaxClient{
@@ -92,7 +91,8 @@ type MaxClient struct {
 	FilledOrdersMutex   sync.RWMutex
 
 	// All markets pairs
-	Markets []Market
+	Markets      []Market
+	MarketsMutex sync.RWMutex
 
 	// Account
 	Account Member
@@ -131,7 +131,7 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
 
-	log.Printf("Cancel %d Orders.", len(canceledOrders))
+	LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders.")
 
 	// data update
 	// local balance update
@@ -142,11 +142,11 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 		market := order.Market
 		price, err := strconv.ParseFloat(order.Price, 64)
 		if err != nil {
-			log.Print(err)
+			LogWarningToDailyLogFile(err)
 		}
 		volume, err := strconv.ParseFloat(order.Volume, 64)
 		if err != nil {
-			log.Print(err)
+			LogWarningToDailyLogFile(err)
 		}
 		Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order.
 	}
@@ -161,7 +161,7 @@ func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
 		return WsOrder{}, errors.New("fail to cancel order" + strconv.Itoa(int(id)))
 	}
 
-	log.Printf("Cancel Order %v.", id)
+	LogInfoToDailyLogFile("Cancel Order ", id, ".")
 
 	// data update
 	// local balance update
@@ -169,11 +169,11 @@ func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
 	side := order.Side
 	price, err := strconv.ParseFloat(order.Price, 64)
 	if err != nil {
-		log.Print(err)
+		LogWarningToDailyLogFile(err)
 	}
 	volume, err := strconv.ParseFloat(order.Volume, 64)
 	if err != nil {
-		log.Print(err)
+		LogWarningToDailyLogFile(err)
 	}
 
 	Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order
@@ -201,7 +201,7 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
 
-	log.Printf("Cancel %d Orders.", len(canceledOrders))
+	LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders.")
 
 	// local balance update
 	for i := 0; i < len(canceledOrders); i++ {
@@ -213,11 +213,11 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 		market := order.Market
 		price, err := strconv.ParseFloat(order.Price, 64)
 		if err != nil {
-			log.Print(err)
+			LogWarningToDailyLogFile(err)
 		}
 		volume, err := strconv.ParseFloat(order.Volume, 64)
 		if err != nil {
-			log.Print(err)
+			LogWarningToDailyLogFile(err)
 		}
 		Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order.
 	}
@@ -335,7 +335,7 @@ func (Mc *MaxClient) PlaceMarketOrder(market string, side string, volume float64
 	// local balance update
 	price, err := strconv.ParseFloat(order.Price, 64)
 	if err != nil {
-		log.Print(err)
+		LogWarningToDailyLogFile(err)
 	}
 	Mc.updateLocalBalance(market, side, price, volume, false) // false means this is a normal order
 
@@ -366,7 +366,7 @@ func (Mc *MaxClient) GetBalance() ([]Account, error) {
 func (Mc *MaxClient) BalanceGlobal2Local() error {
 	Member, err := Mc.GetAccount()
 	if err != nil {
-		log.Print(err)
+		LogFatalToDailyLogFile(err)
 	}
 
 	Mc.LocalBalanceMutex.Lock()
@@ -377,12 +377,12 @@ func (Mc *MaxClient) BalanceGlobal2Local() error {
 		currency := Accounts[i].Currency
 		balance, err := strconv.ParseFloat(Accounts[i].Balance, 64)
 		if err != nil {
-			log.Print(err)
+			LogFatalToDailyLogFile(err)
 			return errors.New("fail to parse balance to float64")
 		}
 		locked, err := strconv.ParseFloat(Accounts[i].Locked, 64)
 		if err != nil {
-			log.Print(err)
+			LogFatalToDailyLogFile(err)
 			return errors.New("fail to parse locked balance to float64")
 		}
 
@@ -401,28 +401,35 @@ func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 
 	wsOrders := map[int32]WsOrder{}
 	for i := 0; i < len(orders); i++ {
-		wsOrders = append(wsOrders, WsOrder(orders[i]))
+		order := WsOrder(orders[i])
+		wsOrders[order.Id] = order
 	}
 
 	return wsOrders, nil
 }
 
-func (Mc *MaxClient) OrderGlobal2Local() error {
-	newOrders := map[int32]WsOrder{}
+func (Mc *MaxClient) MarketsGolval2Local() error {
+	Mc.MarketsMutex.Lock()
+	defer Mc.MarketsMutex.Unlock()
 	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(Mc.ctx)
 	if err != nil {
 		return errors.New("fail to get market")
 	}
+	Mc.Markets = markets
+	return nil
+}
 
-	for i := 0; i < len(markets); i++ {
-		marketId := markets[i].Id
-		wsOrders, err := Mc.GetOrders(marketId)
+func (Mc *MaxClient) OrderGlobal2Local() error {
+	newOrders := map[int32]WsOrder{}
+	for i := 0; i < len(Mc.Markets); i++ {
+		marketId := Mc.Markets[i].Id
+		orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, marketId, nil)
 		if err != nil {
-			errMsg := fmt.Sprintf("fail to get %s orders", marketId)
-			return errors.New(errMsg)
+			return errors.New("fail to get order list")
 		}
-		for j := 0; j < len(wsOrders); j++ {
-			newOrders[wsOrders[j].Id] = wsOrders[j]
+
+		for j := 0; j < len(orders); j++ {
+			newOrders[orders[j].Id] = WsOrder(orders[j])
 		}
 	}
 
@@ -446,7 +453,7 @@ func (Mc *MaxClient) DetectFilledOrders() map[string]HedgingOrder {
 		if _, in := Mc.PartialFilledOrders[order.Id]; in {
 			f, err := strconv.ParseFloat(Mc.PartialFilledOrders[order.Id].ExecutedVolume, 64)
 			if err != nil {
-				log.Print("fail to convert previous executed volume: ", err)
+				LogWarningToDailyLogFile("fail to convert previous executed volume: ", err)
 			} else {
 				preEv = f
 			}
@@ -455,11 +462,11 @@ func (Mc *MaxClient) DetectFilledOrders() map[string]HedgingOrder {
 		market := order.Market
 		price, err := strconv.ParseFloat(order.Price, 64)
 		if err != nil {
-			log.Print(err)
+			LogErrorToDailyLogFile(err, order.Price, "is the element can't be convert")
 		}
 		volume, err := strconv.ParseFloat(order.ExecutedVolume, 64)
 		if err != nil {
-			log.Print(err)
+			LogErrorToDailyLogFile(err, order.ExecutedVolume, "is the element can't be convert")
 		}
 		if volume > preEv {
 			volume = volume - preEv
@@ -478,12 +485,12 @@ func (Mc *MaxClient) DetectFilledOrders() map[string]HedgingOrder {
 		} else {
 			base, quote, err := Mc.checkBaseQuote(market)
 			if err != nil {
-				log.Print(err)
+				LogFatalToDailyLogFile(err)
 			}
 			ho := HedgingOrder{
 				Market:        market,
-				Base: base,
-				Quote: quote,
+				Base:          base,
+				Quote:         quote,
 				PartialProfit: price * volume * s,
 				TotalVolume:   volume * s,
 				Timestamp:     timestamp,
@@ -561,7 +568,7 @@ func (Mc *MaxClient) checkBalanceEnoughLocal(market, side string, price, volume 
 
 	base, quote, err := Mc.checkBaseQuote(market)
 	if err != nil {
-		log.Print(err)
+		LogErrorToDailyLogFile(err)
 		return false
 	}
 	switch side {
@@ -585,7 +592,7 @@ func (Mc *MaxClient) updateLocalBalance(market, side string, price, volume float
 	defer Mc.LocalBalanceMutex.Unlock()
 	base, quote, err := Mc.checkBaseQuote(market)
 	if err != nil {
-		log.Print(err)
+		LogFatalToDailyLogFile(err)
 		return errors.New("fail to update local balance")
 	}
 	switch side {
@@ -608,17 +615,5 @@ func (Mc *MaxClient) updateLocalBalance(market, side string, price, volume float
 			Mc.LocalLocked[quote] += needed
 		}
 	}
-	return nil
-}
-
-func SendHedgingOrders(hedgingOrders map[string]HedgingOrder) error {
-	if len(hedgingOrders) == 0 {
-		return nil
-	}
-
-	for key, val := range hedgingOrders {
-		fmt.Println(key, val)
-	}
-
 	return nil
 }
