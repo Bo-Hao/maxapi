@@ -54,7 +54,6 @@ func (Mc *MaxClient) Run() {
 	go func() {
 		<-c
 		Mc.ShutDown()
-		os.Exit(1)
 	}()
 
 }
