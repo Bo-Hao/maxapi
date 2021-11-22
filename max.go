@@ -86,8 +86,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 		PartialFilledOrders: map[int32]WsOrder{},
 
 		Markets:      markets,
-		LocalBalance: map[string]float64{},
-		LocalLocked:  map[string]float64{},
+		LocalBalance: map[string]*Balance{},
 	}
 }
 
@@ -96,7 +95,7 @@ func (Mc *MaxClient) ShutDown() {
 	Mc.CancelAllOrders()
 	Mc.cancelFunc()
 	Mc.shuting = true
-	time.Sleep(3*time.Second)
+	time.Sleep(3 * time.Second)
 	os.Exit(1)
 
 }
@@ -138,10 +137,8 @@ type MaxClient struct {
 	Account Member
 
 	// local balance
-	LocalBalance      map[string]float64 // currency balance
+	LocalBalance      map[string]*Balance // currency balance
 	LocalBalanceMutex sync.RWMutex
-	LocalLocked       map[string]float64 // locked currency balance
-	
 }
 
 type ExchangeInfo struct {
@@ -392,14 +389,13 @@ func (Mc *MaxClient) GetAccount() (Member, error) {
 	return member, nil
 }
 
-func (Mc *MaxClient) GetBalance() (map[string]float64, map[string]float64, error) {
-	localbalance := map[string]float64{}
-	locallocked := map[string]float64{}
-	
+func (Mc *MaxClient) GetBalance() (map[string]*Balance, error) {
+	localbalance := map[string]*Balance{}
+
 	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(Mc.ctx, Mc.apiKey, Mc.apiSecret)
 	if err != nil {
 		fmt.Println(err)
-		return map[string]float64{}, map[string]float64{}, errors.New("fail to get balance")
+		return map[string]*Balance{}, errors.New("fail to get balance")
 	}
 	Accounts := member.Accounts
 	for i := 0; i < len(Accounts); i++ {
@@ -407,19 +403,19 @@ func (Mc *MaxClient) GetBalance() (map[string]float64, map[string]float64, error
 		balance, err := strconv.ParseFloat(Accounts[i].Balance, 64)
 		if err != nil {
 			LogFatalToDailyLogFile(err)
-			return map[string]float64{}, map[string]float64{}, errors.New("fail to parse balance to float64")
+			return map[string]*Balance{}, errors.New("fail to parse balance to float64")
 		}
 		locked, err := strconv.ParseFloat(Accounts[i].Locked, 64)
 		if err != nil {
 			LogFatalToDailyLogFile(err)
-			return map[string]float64{}, map[string]float64{}, errors.New("fail to parse locked balance to float64")
+			return map[string]*Balance{}, errors.New("fail to parse locked balance to float64")
 		}
 
-		localbalance[currency] = balance
-		locallocked[currency] = locked
+		localbalance[currency].Avaliable = balance
+		localbalance[currency].Locked = locked
 	}
 
-	return localbalance, locallocked, nil
+	return localbalance, nil
 }
 
 func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
@@ -472,8 +468,8 @@ func (Mc *MaxClient) BalanceGlobal2Local() error {
 			return errors.New("fail to parse locked balance to float64")
 		}
 
-		Mc.LocalBalance[currency] = balance
-		Mc.LocalLocked[currency] = locked
+		Mc.LocalBalance[currency].Avaliable = balance
+		Mc.LocalBalance[currency].Locked = locked
 	}
 
 	return nil
@@ -633,13 +629,13 @@ func (Mc *MaxClient) checkBalanceEnoughLocal(market, side string, price, volume 
 	}
 	switch side {
 	case "sell":
-		baseBalance := Mc.LocalBalance[base]
+		baseBalance := Mc.LocalBalance[base].Avaliable
 		if baseBalance > volume {
 			enough = true
 		}
 	case "buy":
 		needed := price * volume
-		quoteBalance := Mc.LocalBalance[quote]
+		quoteBalance := Mc.LocalBalance[quote].Avaliable
 		if quoteBalance >= needed {
 			enough = true
 		}
@@ -658,22 +654,28 @@ func (Mc *MaxClient) updateLocalBalance(market, side string, price, volume float
 	switch side {
 	case "sell":
 		if gain {
-			Mc.LocalBalance[base] += volume
-			Mc.LocalLocked[base] -= volume
+			Mc.LocalBalance[base].Avaliable += volume
+			Mc.LocalBalance[base].Locked -= volume
 		} else {
-			Mc.LocalBalance[base] -= volume
-			Mc.LocalLocked[base] += volume
+			Mc.LocalBalance[base].Avaliable -= volume
+			Mc.LocalBalance[base].Locked += volume
 
 		}
 	case "buy":
 		needed := price * volume
 		if gain {
-			Mc.LocalBalance[quote] += needed
-			Mc.LocalLocked[quote] -= needed
+			Mc.LocalBalance[quote].Avaliable += needed
+			Mc.LocalBalance[quote].Locked -= needed
 		} else {
-			Mc.LocalBalance[quote] -= needed
-			Mc.LocalLocked[quote] += needed
+			Mc.LocalBalance[quote].Avaliable -= needed
+			Mc.LocalBalance[quote].Locked += needed
 		}
 	}
 	return nil
+}
+
+type Balance struct {
+	Name      string
+	Avaliable float64
+	Locked    float64
 }
