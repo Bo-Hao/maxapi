@@ -53,6 +53,7 @@ func (Mc *MaxClient) Run() {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
+		fmt.Println("Ctrl + C is pressed")
 		Mc.ShutDown()
 	}()
 
