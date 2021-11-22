@@ -452,6 +452,8 @@ func (Mc *MaxClient) BalanceGlobal2Local() error {
 		LogFatalToDailyLogFile(err)
 	}
 
+	fmt.Println(Mc.LocalBalance, "2222")
+
 	Mc.LocalBalanceMutex.Lock()
 	defer Mc.LocalBalanceMutex.Unlock()
 
