@@ -321,9 +321,12 @@ func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
 				wsLocked = 0.0
 				return errors.New("fail to parse float")
 			}
-
-			Mc.LocalBalance[wsCurrency["cu"].(string)].Avaliable = wsBalance
-			Mc.LocalBalance[wsCurrency["cu"].(string)].Locked = wsLocked
+			b := Balance{
+				Name:      wsCurrency["cu"].(string),
+				Avaliable: wsBalance,
+				Locked:    wsLocked,
+			}
+			Mc.LocalBalance[b.Name] = b
 		} // end for
 	} // end switch
 

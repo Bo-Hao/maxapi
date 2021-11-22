@@ -59,7 +59,7 @@ func (Mc *MaxClient) Run() {
 
 }
 
-func NewMaxClient(APIKEY, APISECRET string) MaxClient {
+func NewMaxClient(APIKEY, APISECRET string) *MaxClient {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	// api client
@@ -72,7 +72,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 		LogFatalToDailyLogFile(err)
 	}
 
-	return MaxClient{
+	return &MaxClient{
 		apiKey:    APIKEY,
 		apiSecret: APISECRET,
 
@@ -87,7 +87,7 @@ func NewMaxClient(APIKEY, APISECRET string) MaxClient {
 		PartialFilledOrders: map[int32]WsOrder{},
 
 		Markets:      markets,
-		LocalBalance: map[string]*Balance{},
+		LocalBalance: map[string]Balance{},
 	}
 }
 
@@ -138,7 +138,7 @@ type MaxClient struct {
 	Account Member
 
 	// local balance
-	LocalBalance      map[string]*Balance // currency balance
+	LocalBalance      map[string]Balance // currency balance
 	LocalBalanceMutex sync.RWMutex
 }
 
@@ -390,13 +390,13 @@ func (Mc *MaxClient) GetAccount() (Member, error) {
 	return member, nil
 }
 
-func (Mc *MaxClient) GetBalance() (map[string]*Balance, error) {
-	localbalance := map[string]*Balance{}
+func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
+	localbalance := map[string]Balance{}
 
 	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(Mc.ctx, Mc.apiKey, Mc.apiSecret)
 	if err != nil {
 		fmt.Println(err)
-		return map[string]*Balance{}, errors.New("fail to get balance")
+		return map[string]Balance{}, errors.New("fail to get balance")
 	}
 	Accounts := member.Accounts
 	for i := 0; i < len(Accounts); i++ {
@@ -404,16 +404,20 @@ func (Mc *MaxClient) GetBalance() (map[string]*Balance, error) {
 		balance, err := strconv.ParseFloat(Accounts[i].Balance, 64)
 		if err != nil {
 			LogFatalToDailyLogFile(err)
-			return map[string]*Balance{}, errors.New("fail to parse balance to float64")
+			return map[string]Balance{}, errors.New("fail to parse balance to float64")
 		}
 		locked, err := strconv.ParseFloat(Accounts[i].Locked, 64)
 		if err != nil {
 			LogFatalToDailyLogFile(err)
-			return map[string]*Balance{}, errors.New("fail to parse locked balance to float64")
+			return map[string]Balance{}, errors.New("fail to parse locked balance to float64")
 		}
 
-		localbalance[currency].Avaliable = balance
-		localbalance[currency].Locked = locked
+		b := Balance{
+			Name:      currency,
+			Avaliable: balance,
+			Locked:    locked,
+		}
+		localbalance[currency] = b
 	}
 
 	return localbalance, nil
@@ -452,8 +456,6 @@ func (Mc *MaxClient) BalanceGlobal2Local() error {
 		LogFatalToDailyLogFile(err)
 	}
 
-	fmt.Println(Mc.LocalBalance, "2222")
-
 	Mc.LocalBalanceMutex.Lock()
 	defer Mc.LocalBalanceMutex.Unlock()
 
@@ -471,8 +473,12 @@ func (Mc *MaxClient) BalanceGlobal2Local() error {
 			return errors.New("fail to parse locked balance to float64")
 		}
 
-		Mc.LocalBalance[currency].Avaliable = balance
-		Mc.LocalBalance[currency].Locked = locked
+		b := Balance{
+			Name:      currency,
+			Avaliable: balance,
+			Locked:    locked,
+		}
+		Mc.LocalBalance[currency] = b
 	}
 
 	return nil
@@ -654,25 +660,29 @@ func (Mc *MaxClient) updateLocalBalance(market, side string, price, volume float
 		LogFatalToDailyLogFile(err)
 		return errors.New("fail to update local balance")
 	}
+
 	switch side {
 	case "sell":
+		bb := Mc.LocalBalance[base]
 		if gain {
-			Mc.LocalBalance[base].Avaliable += volume
-			Mc.LocalBalance[base].Locked -= volume
+			bb.Avaliable += volume
+			bb.Locked -= volume
 		} else {
-			Mc.LocalBalance[base].Avaliable -= volume
-			Mc.LocalBalance[base].Locked += volume
-
+			bb.Avaliable -= volume
+			bb.Locked += volume
 		}
+		Mc.LocalBalance[base] = bb
 	case "buy":
+		bq := Mc.LocalBalance[quote]
 		needed := price * volume
 		if gain {
-			Mc.LocalBalance[quote].Avaliable += needed
-			Mc.LocalBalance[quote].Locked -= needed
+			bq.Avaliable += needed
+			bq.Locked -= needed
 		} else {
-			Mc.LocalBalance[quote].Avaliable -= needed
-			Mc.LocalBalance[quote].Locked += needed
+			bq.Avaliable -= needed
+			bq.Locked += needed
 		}
+		Mc.LocalBalance[quote] = bq
 	}
 	return nil
 }
