@@ -37,6 +37,7 @@ func (Mc *MaxClient) SubscribeWS() {
 
 	// mainloop
 	for {
+		Mc.WsClient.onErrMutex.Lock()
 		select {
 		case <-Mc.ctx.Done():
 			Mc.WsClient.OnErr = false
@@ -70,6 +71,7 @@ func (Mc *MaxClient) SubscribeWS() {
 				message := "max websocket reconnecting"
 				LogInfoToDailyLogFile(message)
 			}
+			Mc.WsClient.onErrMutex.Unlock()
 			time.Sleep(1 * time.Second)
 		} // end select
 
@@ -81,12 +83,14 @@ func (Mc *MaxClient) SubscribeWS() {
 
 	Mc.WsClient.Conn.Close()
 	// if it is manual work.
+	Mc.WsClient.onErrMutex.RLock()
 	if Mc.WsClient.OnErr {
 		Mc.WsClient.TmpOrdersMutex.Lock()
 		Mc.WsClient.TmpOrders = Mc.LimitOrders
 		Mc.WsClient.TmpOrdersMutex.Unlock()
 		Mc.SubscribeWS()
 	}
+	Mc.WsClient.onErrMutex.RUnlock()
 }
 
 func GetMaxSubscribeMessage(product, channel string, symbols []string) ([]byte, error) {
@@ -202,10 +206,10 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 	var wsOrders []WsOrder
 	json.Unmarshal(jsonbody, &wsOrders)
 
-	Mc.LimitOrdersMutex.Lock()
-	defer Mc.LimitOrdersMutex.Unlock()
-	Mc.FilledOrdersMutex.Lock()
-	defer Mc.FilledOrdersMutex.Unlock()
+	Mc.limitOrdersMutex.Lock()
+	defer Mc.limitOrdersMutex.Unlock()
+	Mc.filledOrdersMutex.Lock()
+	defer Mc.filledOrdersMutex.Unlock()
 
 	for i := 0; i < len(wsOrders); i++ {
 		if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
@@ -243,8 +247,8 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 }
 
 func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
-	Mc.LimitOrdersMutex.Lock()
-	defer Mc.LimitOrdersMutex.Unlock()
+	Mc.limitOrdersMutex.Lock()
+	defer Mc.limitOrdersMutex.Unlock()
 	Mc.WsClient.TmpOrdersMutex.Lock()
 	defer Mc.WsClient.TmpOrdersMutex.Unlock()
 
@@ -267,8 +271,8 @@ func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
 
 	Mc.LimitOrders = trackedWsOrders
 
-	Mc.FilledOrdersMutex.Lock()
-	defer Mc.FilledOrdersMutex.Unlock()
+	Mc.filledOrdersMutex.Lock()
+	defer Mc.filledOrdersMutex.Unlock()
 	for id, odr := range untrackedWsOrders {
 		if _, ok := Mc.FilledOrders[id]; !ok {
 			Mc.FilledOrders[id] = odr
@@ -302,8 +306,8 @@ type Trade struct {
 // Account
 //	account_snapshot and //	account_update
 func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
-	Mc.LocalBalanceMutex.Lock()
-	defer Mc.LocalBalanceMutex.Unlock()
+	Mc.localBalanceMutex.Lock()
+	defer Mc.localBalanceMutex.Unlock()
 	switch reflect.TypeOf(msgMap["B"]).Kind() {
 	case reflect.Slice:
 		s := reflect.ValueOf(msgMap["B"])
