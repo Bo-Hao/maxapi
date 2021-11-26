@@ -239,10 +239,10 @@ func (Mc *MaxClient) OrderGlobal2Local() error {
 	return nil
 }
 
-func (Mc *MaxClient) DetectFilledOrders() map[string]HedgingOrder {
+func (Mc *MaxClient) DetectFilledOrders() (map[string]HedgingOrder, bool) {
 	hedgingOrders := map[string]HedgingOrder{}
 	if len(Mc.FilledOrders) == 0 {
-		return hedgingOrders
+		return hedgingOrders, false
 	}
 
 	Mc.filledOrdersMutex.Lock()
@@ -262,11 +262,11 @@ func (Mc *MaxClient) DetectFilledOrders() map[string]HedgingOrder {
 		market := order.Market
 		price, err := strconv.ParseFloat(order.Price, 64)
 		if err != nil {
-			LogErrorToDailyLogFile(err, order.Price, "is the element can't be convert")
+			LogFatalToDailyLogFile(err, order.Price, "is the element can't be convert")
 		}
 		volume, err := strconv.ParseFloat(order.ExecutedVolume, 64)
 		if err != nil {
-			LogErrorToDailyLogFile(err, order.ExecutedVolume, "is the element can't be convert")
+			LogFatalToDailyLogFile(err, order.ExecutedVolume, "is the element can't be convert")
 		}
 		if volume > preEv {
 			volume = volume - preEv
@@ -324,7 +324,7 @@ func (Mc *MaxClient) DetectFilledOrders() map[string]HedgingOrder {
 	}
 
 	Mc.FilledOrders = map[int32]WsOrder{}
-	return hedgingOrders
+	return hedgingOrders, true
 }
 
 type HedgingOrder struct {
