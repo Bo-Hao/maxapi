@@ -343,6 +343,11 @@ type HedgingOrder struct {
 	// the order which should be sent
 	HedgeVolume float64
 	HedgeSide   string
+
+	// hedged 
+	Fee float64 
+	FeeCurrency float64 
+	AvgPrice float64
 }
 
 // ########### assistant functions ###########
