@@ -125,6 +125,7 @@ type MaxClient struct {
 
 	// exchange information
 	ExchangeInfo ExchangeInfo
+	exchangeInfoMutex sync.RWMutex
 
 	// web socket client
 	WsClient WebsocketClient
@@ -146,7 +147,7 @@ type MaxClient struct {
 	marketsMutex sync.RWMutex
 
 	// Account
-	Account Member
+	Account      Member
 	accountMutex sync.RWMutex
 
 	// local balance
@@ -161,9 +162,9 @@ type ExchangeInfo struct {
 }
 
 type WebsocketClient struct {
-	OnErr bool
+	OnErr      bool
 	onErrMutex sync.RWMutex
-	Conn  *websocket.Conn
+	Conn       *websocket.Conn
 
 	LastUpdatedId      decimal.Decimal
 	LastUpdatedIdMutex sync.RWMutex
@@ -279,21 +280,23 @@ func (Mc *MaxClient) DetectFilledOrders() (map[string]HedgingOrder, bool) {
 
 		timestamp := int32(time.Now().UnixMilli())
 
-		if hegingOrder, ok := hedgingOrders[market]; ok {
-			hegingOrder.PartialProfit += price * volume * s
-			hegingOrder.TotalVolume += volume * s
+		if hedgingOrder, ok := hedgingOrders[market]; ok {
+			hedgingOrder.Profit += price * volume * s
+			hedgingOrder.Volume += volume * s
+			hedgingOrder.AbsVolume += volume
 		} else {
 			base, quote, err := Mc.checkBaseQuote(market)
 			if err != nil {
 				LogFatalToDailyLogFile(err)
 			}
 			ho := HedgingOrder{
-				Market:        market,
-				Base:          base,
-				Quote:         quote,
-				PartialProfit: price * volume * s,
-				TotalVolume:   volume * s,
-				Timestamp:     timestamp,
+				Market:    market,
+				Base:      base,
+				Quote:     quote,
+				Profit:    price * volume * s,
+				Volume:    volume * s,
+				AbsVolume: volume, 
+				Timestamp: timestamp,
 			}
 			hedgingOrders[market] = ho
 		}
@@ -307,47 +310,27 @@ func (Mc *MaxClient) DetectFilledOrders() (map[string]HedgingOrder, bool) {
 
 	}
 
-	for _, hedgingOrder := range hedgingOrders {
-		if hedgingOrder.TotalVolume != 0 {
-			hedgingOrder.State = "wait"
-			if hedgingOrder.TotalVolume > 0 {
-				hedgingOrder.HedgeSide = "sell"
-				hedgingOrder.HedgeVolume = hedgingOrder.TotalVolume
-			} else {
-				hedgingOrder.HedgeSide = "buy"
-				hedgingOrder.HedgeVolume = hedgingOrder.TotalVolume * -1
-			}
-		} else {
-			hedgingOrder.State = "done"
-			hedgingOrder.TotalProfit = hedgingOrder.PartialProfit
-		}
-	}
-
 	Mc.FilledOrders = map[int32]WsOrder{}
 	return hedgingOrders, true
 }
 
 type HedgingOrder struct {
 	// order
-	Market        string
-	Base          string
-	Quote         string
-	PartialProfit float64
-	TotalVolume   float64
-	Timestamp     int32
+	Market    string
+	Base      string
+	Quote     string
+	Profit    float64
+	Volume    float64
+	Timestamp int32
+	AbsVolume float64
 
-	// hedging state
-	State       string
-	TotalProfit float64
-
-	// the order which should be sent
-	HedgeVolume float64
-	HedgeSide   string
-
-	// hedged 
-	Fee float64 
-	FeeCurrency float64 
-	AvgPrice float64
+	// hedged info
+	TotalProfit        float64
+	MarketTransactTime int
+	AvgPrice           float64
+	TransactVolume     float64
+	Fee                float64
+	FeeCurrency        string
 }
 
 // ########### assistant functions ###########
