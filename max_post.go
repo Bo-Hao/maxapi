@@ -94,6 +94,7 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 		}
 		Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order.
 	}
+	Mc.UpdatePartialFilledOrders(map[int32]WsOrder{})
 
 	return canceledWsOrders, nil
 }
@@ -101,7 +102,6 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
 	CanceledOrder, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrderDelete(Mc.ctx, Mc.apiKey, Mc.apiSecret, id)
 	if err != nil {
-		fmt.Println(err)
 		return WsOrder{}, errors.New("fail to cancel order" + strconv.Itoa(int(id)))
 	}
 
@@ -121,6 +121,13 @@ func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
 	}
 
 	Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order
+
+	//del partial fill order those in map
+	Mc.filledOrdersMutex.Lock()
+
+	delete(Mc.PartialFilledOrders, order.Id)
+
+	Mc.filledOrdersMutex.Unlock()
 
 	return WsOrder(CanceledOrder), nil
 }
@@ -147,11 +154,13 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 	LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders.")
 
 	// local balance update
+	cancelOrdersKey := []int32{}
 	for i := 0; i < len(canceledOrders); i++ {
 		// update local orders
 		wsOrder := WsOrder(canceledOrders[i])
 		canceledWsOrders = append(canceledWsOrders, wsOrder)
 		order := canceledOrders[i]
+		cancelOrdersKey = append(cancelOrdersKey, order.Id)
 		side := order.Side
 		market := order.Market
 		price, err := strconv.ParseFloat(order.Price, 64)
@@ -164,6 +173,13 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 		}
 		Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order.
 	}
+
+	//del partial fill order those in map
+	Mc.filledOrdersMutex.Lock()
+	for i := 0; i < len(cancelOrdersKey); i++ {
+		delete(Mc.PartialFilledOrders, cancelOrdersKey[i])
+	}
+	Mc.filledOrdersMutex.Unlock()
 
 	return canceledWsOrders, nil
 }
