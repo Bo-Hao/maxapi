@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -13,7 +15,7 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type OrderBookBranch struct {
+type OrderbookBranch struct {
 	ctx         context.Context
 	cancel      *context.CancelFunc
 	conn        *websocket.Conn
@@ -21,10 +23,23 @@ type OrderBookBranch struct {
 		onErr bool
 		mutex sync.RWMutex
 	}
+	Market string
 
-	bids          bookBranch
-	asks          bookBranch
-	lastUpdatedId int32
+	bids                       bookBranch
+	asks                       bookBranch
+	lastUpdatedTimestampBranch struct {
+		timestamp int32
+		mux       sync.RWMutex
+	}
+}
+
+type bookstruct struct {
+	Channcel  string     `json:"c,omitempty"`
+	event     string     `json:"e,omitempty"`
+	market    string     `json:"M,omitempty"`
+	asks      [][]string `json:"a,omitempty"`
+	bids      [][]string `json:"b,omitempty"`
+	timestamp int32      `json:"T,omitempty"`
 }
 
 type bookBranch struct {
@@ -33,22 +48,14 @@ type bookBranch struct {
 	Micro []string
 }
 
-type bookstruct struct {
-	channcel  string     `json:"c,omitempty"`
-	event     string     `json:"e,omitempty"`
-	market    string     `json:"M,omitempty"`
-	asks      [][]string `json:"a,omitempty"`
-	bids      [][]string `json:"b,omitempty"`
-	timestamp int32      `json:"T,omitempty"`
-}
-
-func SpotLocalOrderbook(symbol string, logger *logrus.Logger) *OrderBookBranch {
-	var o OrderBookBranch
-	go o.Maintain(symbol)
+func SpotLocalOrderbook(symbol string, logger *logrus.Logger) *OrderbookBranch {
+	var o OrderbookBranch
+	o.Market = strings.ToLower(symbol)
+	go o.maintain(symbol)
 	return &o
 }
 
-func (o *OrderBookBranch) Maintain(symbol string) {
+func (o *OrderbookBranch) maintain(symbol string) {
 	var url string = "wss://max-stream.maicoin.com/ws"
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -125,7 +132,7 @@ mainloop:
 
 	o.onErrBranch.mutex.RLock()
 	if o.onErrBranch.onErr {
-		o.Maintain(symbol)
+		o.maintain(symbol)
 	}
 	o.onErrBranch.mutex.RUnlock()
 }
@@ -150,7 +157,7 @@ func MaxSubscribeBookMessage(symbol string) ([]byte, error) {
 	return req, nil
 }
 
-func (o *OrderBookBranch) handleMaxBookSocketMsg(msg []byte) error {
+func (o *OrderbookBranch) handleMaxBookSocketMsg(msg []byte) error {
 	var msgMap map[string]interface{}
 	err := json.Unmarshal(msg, &msgMap)
 	if err != nil {
@@ -164,23 +171,13 @@ func (o *OrderBookBranch) handleMaxBookSocketMsg(msg []byte) error {
 		return errors.New("fail to obtain message")
 	}
 
-	channel, ok := msgMap["c"]
-	if !ok {
-		LogWarningToDailyLogFile("there is no channel in message")
-		return errors.New("fail to obtain message")
-	}
-
-	if channel != "book" {
-		return errors.New("Not book channel")
-	}
-
 	// distribute the msg
 	var err2 error
 	switch event {
 	case "subscribed":
 		LogInfoToDailyLogFile("websocket subscribed")
 	case "snapshot":
-		err2 = o.parseOrderbookUpdateMsg(msgMap)
+		err2 = o.parseOrderbookSnapshotMsg(msgMap)
 	case "update":
 		err2 = o.parseOrderbookUpdateMsg(msgMap)
 	}
@@ -191,38 +188,234 @@ func (o *OrderBookBranch) handleMaxBookSocketMsg(msg []byte) error {
 	return nil
 }
 
-func (o *OrderBookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{}) error {
+func (o *OrderbookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{}) error {
 	jsonbody, _ := json.Marshal(msgMap)
 	var book bookstruct
 	json.Unmarshal(jsonbody, &book)
 
-	/* Mc.limitOrdersMutex.Lock()
-	defer Mc.limitOrdersMutex.Unlock()
-	Mc.filledOrdersMutex.Lock()
-	defer Mc.filledOrdersMutex.Unlock() */
+	// extract data
+	if book.Channcel != "book" {
+		return errors.New("wrong channel")
+	}
+	if book.event != "update" {
+		return errors.New("wrong event")
+	}
+	if book.market != o.Market {
+		return errors.New("wrong market")
+	}
 
-	/* for i := 0; i < len(wsOrders); i++ {
-		if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
-			Mc.LimitOrders[wsOrders[i].Id] = wsOrders[i]
-			//fmt.Println("new order arrived: ", wsOrders[i])
+	asks := book.asks
+	bids := book.bids
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		oldAsks := o.asks.Book
+		newAsks, err := updateAsks(asks, oldAsks)
+		if err != nil {
+			newAsks = oldAsks
+		}
+		o.asks.mux.Lock()
+		o.asks.Book = newAsks
+		o.asks.mux.Unlock()
+		wg.Done()
+	}()
+
+	go func() {
+		oldBids := o.bids.Book
+		newBids, err := updateBids(bids, oldBids)
+		if err != nil {
+			newBids = oldBids
+		}
+		o.bids.mux.Lock()
+		o.bids.Book = newBids
+		o.bids.mux.Unlock()
+		wg.Done()
+	}()
+	wg.Wait()
+
+	o.lastUpdatedTimestampBranch.mux.Lock()
+	o.lastUpdatedTimestampBranch.timestamp = book.timestamp
+	o.lastUpdatedTimestampBranch.mux.Unlock()
+
+	return nil
+}
+
+func (o *OrderbookBranch) parseOrderbookSnapshotMsg(msgMap map[string]interface{}) error {
+	jsonbody, _ := json.Marshal(msgMap)
+	var book bookstruct
+	json.Unmarshal(jsonbody, &book)
+
+	// extract data
+	if book.Channcel != "book" {
+		return errors.New("wrong channel")
+	}
+	if book.event != "snapshot" {
+		return errors.New("wrong event")
+	}
+	if book.market != o.Market {
+		return errors.New("wrong market")
+	}
+
+	asks := book.asks
+	bids := book.bids
+	var wg sync.WaitGroup
+	wg.Add(2)
+
+	go func() {
+		sort.Slice(asks, func(i, j int) bool { return asks[i][0] < asks[j][0] })
+		o.asks.mux.Lock()
+		o.asks.Book = asks
+		o.asks.mux.Unlock()
+		wg.Done()
+	}()
+
+	go func() {
+		sort.Slice(bids, func(i, j int) bool { return bids[i][0] > bids[j][0] })
+		o.bids.mux.Lock()
+		o.bids.Book = bids
+		o.bids.mux.Unlock()
+		wg.Done()
+	}()
+	wg.Wait()
+
+	o.lastUpdatedTimestampBranch.mux.Lock()
+	o.lastUpdatedTimestampBranch.timestamp = book.timestamp
+	o.lastUpdatedTimestampBranch.mux.Unlock()
+
+	return nil
+}
+
+func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
+	// sort them ascently
+	sort.Slice(updateAsks, func(i, j int) bool { return updateAsks[i][0] < updateAsks[j][0] })
+	sort.Slice(oldAsks, func(i, j int) bool { return oldAsks[i][0] < oldAsks[j][0] })
+
+	allAsks := make([][]string, 0, len(updateAsks)+len(oldAsks))
+	uLen := len(updateAsks)
+	oLen := len(oldAsks)
+
+	uIdx := 0
+	oIdx := 0
+	for {
+		uAsk := updateAsks[uIdx]
+		oAsk := oldAsks[oIdx]
+
+		if uAsk[0] == oAsk[0] {
+			if uAsk[1] != "0" {
+				allAsks = append(allAsks, uAsk)
+			}
+			uIdx++
+			oIdx++
 		} else {
-			switch wsOrders[i].State {
-			case "cancel":
-				//fmt.Println("order canceled: ", wsOrders[i])
-				delete(Mc.LimitOrders, wsOrders[i].Id)
-			case "done":
-				//fmt.Println("order done: ", wsOrders[i])
-				Mc.FilledOrders[wsOrders[i].Id] = wsOrders[i]
-				delete(Mc.LimitOrders, wsOrders[i].Id)
-			default:
-				//fmt.Println("order partial fill: ", wsOrders[i])
-				if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
-					Mc.LimitOrders[wsOrders[i].Id] = wsOrders[i]
-				}
-				Mc.FilledOrders[wsOrders[i].Id] = wsOrders[i]
+			uP, err := strconv.ParseFloat(uAsk[0], 64)
+			if err != nil {
+				return [][]string{}, errors.New("fail to parse float64")
+			}
+			oP, err := strconv.ParseFloat(oAsk[0], 64)
+			if err != nil {
+				return [][]string{}, errors.New("fail to parse float64")
+			}
+
+			if uP > oP {
+				allAsks = append(allAsks, oAsk)
+				oIdx++
+			} else if uP < oP {
+				allAsks = append(allAsks, uAsk)
+				uIdx++
 			}
 		}
-	} */
-	fmt.Println(book)
-	return nil
+
+		if uIdx >= uLen-1 && oIdx >= oLen-1 {
+			break
+		}
+
+	}
+
+	return allAsks, nil
+}
+
+func updateBids(updateBids [][]string, oldBids [][]string) ([][]string, error) {
+	// sort them descently
+	sort.Slice(updateBids, func(i, j int) bool { return updateBids[i][0] > updateBids[j][0] })
+	sort.Slice(oldBids, func(i, j int) bool { return oldBids[i][0] > oldBids[j][0] })
+
+	allBids := make([][]string, 0, len(updateBids)+len(oldBids))
+	uLen := len(updateBids)
+	oLen := len(oldBids)
+
+	uIdx := 0
+	oIdx := 0
+	for {
+		uBid := updateBids[uIdx]
+		oBid := oldBids[oIdx]
+
+		if uBid[0] == oBid[0] {
+			if uBid[1] != "0" {
+				allBids = append(allBids, uBid)
+			}
+			uIdx++
+			oIdx++
+		} else {
+			uP, err := strconv.ParseFloat(uBid[0], 64)
+			if err != nil {
+				return [][]string{}, errors.New("fail to parse float64")
+			}
+			oP, err := strconv.ParseFloat(oBid[0], 64)
+			if err != nil {
+				return [][]string{}, errors.New("fail to parse float64")
+			}
+
+			if uP < oP {
+				allBids = append(allBids, oBid)
+				oIdx++
+			} else if uP > oP {
+				allBids = append(allBids, uBid)
+				uIdx++
+			}
+		}
+
+		if uIdx >= uLen-1 && oIdx >= oLen-1 {
+			break
+		}
+
+	}
+
+	return allBids, nil
+}
+
+func (o *OrderbookBranch) GetBids() ([][]string, bool) {
+	o.bids.mux.RLock()
+	defer o.bids.mux.RUnlock()
+
+	o.lastUpdatedTimestampBranch.mux.RLock()
+	lastT := o.lastUpdatedTimestampBranch.timestamp
+	o.lastUpdatedTimestampBranch.mux.RUnlock()
+
+	nowT := int32(time.Now().UnixMilli())
+
+	// if there is nothing or late for 1 minute.
+	if len(o.bids.Book) == 0 || nowT-lastT > 1000*60 {
+		return [][]string{}, false
+	}
+	book := o.bids.Book
+	return book, true
+}
+
+func (o *OrderbookBranch) GetAsks() ([][]string, bool) {
+	o.asks.mux.RLock()
+	defer o.asks.mux.RUnlock()
+
+	o.lastUpdatedTimestampBranch.mux.RLock()
+	lastT := o.lastUpdatedTimestampBranch.timestamp
+	o.lastUpdatedTimestampBranch.mux.RUnlock()
+
+	nowT := int32(time.Now().UnixMilli())
+
+	// if there is nothing or late for 1 minute.
+	if len(o.asks.Book) == 0 || nowT-lastT > 1000*60 {
+		return [][]string{}, false
+	}
+	book := o.asks.Book
+	return book, true
 }
