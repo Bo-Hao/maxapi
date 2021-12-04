@@ -326,11 +326,13 @@ type HedgingOrder struct {
 
 	// hedged info
 	TotalProfit        float64
-	MarketTransactTime int
+	MarketTransactTime int32
 	AvgPrice           float64
 	TransactVolume     float64
+	MarketSide string
 	Fee                float64
 	FeeCurrency        string
+	
 }
 
 // ########### assistant functions ###########
