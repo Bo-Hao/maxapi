@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
@@ -34,11 +34,11 @@ type OrderbookBranch struct {
 
 type bookstruct struct {
 	Channcel  string     `json:"c,omitempty"`
-	event     string     `json:"e,omitempty"`
-	market    string     `json:"M,omitempty"`
-	asks      [][]string `json:"a,omitempty"`
-	bids      [][]string `json:"b,omitempty"`
-	timestamp int32      `json:"T,omitempty"`
+	Event     string     `json:"e,omitempty"`
+	Market    string     `json:"M,omitempty"`
+	Asks      [][]string `json:"a,omitempty"`
+	Bids      [][]string `json:"b,omitempty"`
+	Timestamp int32      `json:"T,omitempty"`
 }
 
 type bookBranch struct {
@@ -116,11 +116,10 @@ mainloop:
 				LogInfoToDailyLogFile(message)
 			}
 
-			time.Sleep(1 * time.Second)
+			//time.Sleep(1 * time.Second)
 		} // end select
 
 		// if there is something wrong that the WS should be reconnected.
-
 		o.onErrBranch.mutex.Lock()
 		if o.onErrBranch.onErr {
 			break
@@ -182,6 +181,7 @@ func (o *OrderbookBranch) handleMaxBookSocketMsg(msg []byte) error {
 	}
 
 	if err2 != nil {
+		fmt.Println(err2, "err2")
 		return errors.New("fail to parse message")
 	}
 	return nil
@@ -191,20 +191,21 @@ func (o *OrderbookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{})
 	jsonbody, _ := json.Marshal(msgMap)
 	var book bookstruct
 	json.Unmarshal(jsonbody, &book)
+	fmt.Println("update!!!")
 
 	// extract data
 	if book.Channcel != "book" {
 		return errors.New("wrong channel")
 	}
-	if book.event != "update" {
+	if book.Event != "update" {
 		return errors.New("wrong event")
 	}
-	if book.market != o.Market {
+	if book.Market != o.Market {
 		return errors.New("wrong market")
 	}
 
-	asks := book.asks
-	bids := book.bids
+	asks := book.Asks
+	bids := book.Bids
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -234,7 +235,7 @@ func (o *OrderbookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{})
 	wg.Wait()
 
 	o.lastUpdatedTimestampBranch.mux.Lock()
-	o.lastUpdatedTimestampBranch.timestamp = book.timestamp
+	o.lastUpdatedTimestampBranch.timestamp = book.Timestamp
 	o.lastUpdatedTimestampBranch.mux.Unlock()
 
 	return nil
@@ -249,15 +250,16 @@ func (o *OrderbookBranch) parseOrderbookSnapshotMsg(msgMap map[string]interface{
 	if book.Channcel != "book" {
 		return errors.New("wrong channel")
 	}
-	if book.event != "snapshot" {
+	if book.Event != "snapshot" {
+		fmt.Println("event:", book.Event)
 		return errors.New("wrong event")
 	}
-	if book.market != o.Market {
+	if book.Market != o.Market {
 		return errors.New("wrong market")
 	}
 
-	asks := book.asks
-	bids := book.bids
+	asks := book.Asks
+	bids := book.Bids
 	var wg sync.WaitGroup
 	wg.Add(2)
 
@@ -279,20 +281,24 @@ func (o *OrderbookBranch) parseOrderbookSnapshotMsg(msgMap map[string]interface{
 	wg.Wait()
 
 	o.lastUpdatedTimestampBranch.mux.Lock()
-	o.lastUpdatedTimestampBranch.timestamp = book.timestamp
+	o.lastUpdatedTimestampBranch.timestamp = book.Timestamp
 	o.lastUpdatedTimestampBranch.mux.Unlock()
 
 	return nil
 }
 
 func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
-	// sort them ascently
-	sort.Slice(updateAsks, func(i, j int) bool { return updateAsks[i][0] < updateAsks[j][0] })
-	sort.Slice(oldAsks, func(i, j int) bool { return oldAsks[i][0] < oldAsks[j][0] })
-
 	allAsks := make([][]string, 0, len(updateAsks)+len(oldAsks))
 	uLen := len(updateAsks)
 	oLen := len(oldAsks)
+
+	if uLen == 0 {
+		return oldAsks, nil
+	}
+
+	// sort them ascently
+	sort.Slice(updateAsks, func(i, j int) bool { return updateAsks[i][0] < updateAsks[j][0] })
+	sort.Slice(oldAsks, func(i, j int) bool { return oldAsks[i][0] < oldAsks[j][0] })
 
 	uIdx := 0
 	oIdx := 0
@@ -328,20 +334,36 @@ func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
 		if uIdx >= uLen-1 && oIdx >= oLen-1 {
 			break
 		}
+		if uIdx == uLen-1 {
+			allAsks = append(allAsks, oldAsks[oIdx:]...)
+			break
+		}
+		if oIdx == oLen-1 {
+			allAsks = append(allAsks, updateAsks[uIdx:]...)
+			break
+		}
 
+	}
+
+	if len(allAsks) >= 10 {
+		allAsks = allAsks[:10]
 	}
 
 	return allAsks, nil
 }
 
 func updateBids(updateBids [][]string, oldBids [][]string) ([][]string, error) {
-	// sort them descently
-	sort.Slice(updateBids, func(i, j int) bool { return updateBids[i][0] > updateBids[j][0] })
-	sort.Slice(oldBids, func(i, j int) bool { return oldBids[i][0] > oldBids[j][0] })
-
 	allBids := make([][]string, 0, len(updateBids)+len(oldBids))
 	uLen := len(updateBids)
 	oLen := len(oldBids)
+
+	if uLen == 0 {
+		return oldBids, nil
+	}
+
+	// sort them descently
+	sort.Slice(updateBids, func(i, j int) bool { return updateBids[i][0] > updateBids[j][0] })
+	sort.Slice(oldBids, func(i, j int) bool { return oldBids[i][0] > oldBids[j][0] })
 
 	uIdx := 0
 	oIdx := 0
@@ -374,10 +396,23 @@ func updateBids(updateBids [][]string, oldBids [][]string) ([][]string, error) {
 			}
 		}
 
-		if uIdx >= uLen-1 && oIdx >= oLen-1 {
+		if uIdx == uLen-1 && oIdx == oLen-1 {
 			break
 		}
 
+		if uIdx == uLen-1 {
+			allBids = append(allBids, oldBids[oIdx:]...)
+			break
+		}
+		if oIdx == oLen-1 {
+			allBids = append(allBids, updateBids[uIdx:]...)
+			break
+		}
+
+	}
+
+	if len(allBids) >= 10 {
+		allBids = allBids[:10]
 	}
 
 	return allBids, nil
@@ -387,14 +422,8 @@ func (o *OrderbookBranch) GetBids() ([][]string, bool) {
 	o.bids.mux.RLock()
 	defer o.bids.mux.RUnlock()
 
-	o.lastUpdatedTimestampBranch.mux.RLock()
-	lastT := o.lastUpdatedTimestampBranch.timestamp
-	o.lastUpdatedTimestampBranch.mux.RUnlock()
-
-	nowT := int32(time.Now().UnixMilli())
-
 	// if there is nothing or late for 1 minute.
-	if len(o.bids.Book) == 0 || nowT-lastT > 1000*60 {
+	if len(o.bids.Book) == 0 {
 		return [][]string{}, false
 	}
 	book := o.bids.Book
@@ -405,14 +434,8 @@ func (o *OrderbookBranch) GetAsks() ([][]string, bool) {
 	o.asks.mux.RLock()
 	defer o.asks.mux.RUnlock()
 
-	o.lastUpdatedTimestampBranch.mux.RLock()
-	lastT := o.lastUpdatedTimestampBranch.timestamp
-	o.lastUpdatedTimestampBranch.mux.RUnlock()
-
-	nowT := int32(time.Now().UnixMilli())
-
 	// if there is nothing or late for 1 minute.
-	if len(o.asks.Book) == 0 || nowT-lastT > 1000*60 {
+	if len(o.asks.Book) == 0 {
 		return [][]string{}, false
 	}
 	book := o.asks.Book
