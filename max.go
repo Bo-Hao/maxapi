@@ -61,8 +61,8 @@ func (Mc *MaxClient) Run() {
 	}()
 }
 
-func NewMaxClient(APIKEY, APISECRET string) *MaxClient {
-	ctx, cancel := context.WithCancel(context.Background())
+func NewMaxClient(APIKEY, APISECRET string, ctx context.Context) *MaxClient {
+	//ctx, cancel := context.WithCancel(context.Background())
 
 	// api client
 	cfg := NewConfiguration()
@@ -77,7 +77,7 @@ func NewMaxClient(APIKEY, APISECRET string) *MaxClient {
 	m.apiKey = APIKEY
 	m.apiSecret = APISECRET
 	m.ctx = ctx
-	m.cancelFunc = cancel
+	//m.cancelFunc = cancel
 	m.ShutingBranch.shut = false
 	m.ApiClient = apiclient
 	m.OrdersBranch.Orders = map[int32]WsOrder{}
