@@ -12,8 +12,7 @@ type MaxClient struct {
 	apiKey    string
 	apiSecret string
 
-	ctx           context.Context
-	cancelFunc    context.CancelFunc
+	cancelFunc    *context.CancelFunc
 	ShutingBranch struct {
 		shut bool
 		mux  sync.RWMutex

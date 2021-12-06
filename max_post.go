@@ -1,6 +1,7 @@
 package maxapi
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strconv"
@@ -8,9 +9,8 @@ import (
 )
 
 func (Mc *MaxClient) GetAccount() (Member, error) {
-	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(Mc.ctx, Mc.apiKey, Mc.apiSecret)
+	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(context.Background(), Mc.apiKey, Mc.apiSecret)
 	if err != nil {
-		fmt.Println(err)
 		return Member{}, errors.New("fail to get account")
 	}
 	Mc.AccountBranch.mux.Lock()
@@ -23,7 +23,7 @@ func (Mc *MaxClient) GetAccount() (Member, error) {
 func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 	localbalance := map[string]Balance{}
 
-	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(Mc.ctx, Mc.apiKey, Mc.apiSecret)
+	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(context.Background(), Mc.apiKey, Mc.apiSecret)
 	if err != nil {
 		return map[string]Balance{}, errors.New("fail to get balance")
 	}
@@ -58,7 +58,7 @@ func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 
 // Get orders of the coresponding $market 
 func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
-	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, nil)
+	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, nil)
 	if err != nil {
 		return map[int32]WsOrder{}, errors.New("fail to get order list")
 	}
@@ -92,7 +92,7 @@ func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 	markets := Mc.ReadMarkets()
 	for i := 0; i < len(markets); i++ {
 		marketId := markets[i].Id
-		orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, marketId, nil)
+		orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, marketId, nil)
 		if err != nil {
 			return map[int32]WsOrder{}, errors.New("fail to get order list")
 		}
@@ -111,7 +111,7 @@ func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 func (Mc *MaxClient) GetMarkets() ([]Market, error) {
 	Mc.MarketsBranch.mux.RLock()
 	defer Mc.MarketsBranch.mux.RUnlock()
-	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(Mc.ctx)
+	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(context.Background())
 	if err != nil {
 		return []Market{}, errors.New("fail to get market")
 	}
@@ -122,7 +122,7 @@ func (Mc *MaxClient) GetMarkets() ([]Market, error) {
 func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 	Mc.OrdersBranch.mux.Lock()
 	defer Mc.OrdersBranch.mux.Unlock()
-	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(Mc.ctx, Mc.apiKey, Mc.apiSecret, nil)
+	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(context.Background(), Mc.apiKey, Mc.apiSecret, nil)
 	if err != nil {
 		return []WsOrder{}, errors.New("fail to cancel all orders")
 	}
@@ -153,7 +153,7 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 }
 
 func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
-	CanceledOrder, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrderDelete(Mc.ctx, Mc.apiKey, Mc.apiSecret, id)
+	CanceledOrder, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrderDelete(context.Background(), Mc.apiKey, Mc.apiSecret, id)
 	if err != nil {
 		return WsOrder{}, errors.New("fail to cancel order" + strconv.Itoa(int(id)))
 	}
@@ -196,7 +196,7 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 		params["side"] = side.(string)
 	}
 
-	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(Mc.ctx, Mc.apiKey, Mc.apiSecret, params)
+	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(context.Background(), Mc.apiKey, Mc.apiSecret, params)
 	if err != nil {
 		return []WsOrder{}, errors.New("fail to cancel orders")
 	}
@@ -245,7 +245,7 @@ func (Mc *MaxClient) PlaceLimitOrder(market string, side string, price, volume f
 	params["ordType"] = "limit"
 	vol := fmt.Sprint(volume)
 
-	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, side, vol, params)
+	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, side, vol, params)
 	if err != nil {
 		return WsOrder{}, errors.New("fail to place limit order")
 	}
@@ -315,7 +315,7 @@ func (Mc *MaxClient) PlaceMultiLimitOrders(market string, sides []string, prices
 	optionalMap["orders[price]"] = ordersPrice
 
 	// main api function
-	orders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersMulti(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, sides, ordersVolume, optionalMap)
+	orders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersMulti(context.Background(), Mc.apiKey, Mc.apiSecret, market, sides, ordersVolume, optionalMap)
 	if err != nil {
 		fmt.Println(err)
 		return []WsOrder{}, errors.New("fail to place multi-limit orders")
@@ -337,7 +337,7 @@ func (Mc *MaxClient) PlaceMarketOrder(market string, side string, volume float64
 	params := make(map[string]interface{})
 	params["ordType"] = "market"
 	vol := fmt.Sprint(volume)
-	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, side, vol, params)
+	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, side, vol, params)
 	if err != nil {
 		return WsOrder{}, errors.New("fail to place market orders")
 	}

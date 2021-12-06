@@ -15,7 +15,6 @@ import (
 )
 
 type OrderbookBranch struct {
-	ctx         context.Context
 	cancel      *context.CancelFunc
 	conn        *websocket.Conn
 	onErrBranch struct {
@@ -49,17 +48,15 @@ type bookBranch struct {
 
 func SpotLocalOrderbook(symbol string, logger *logrus.Logger) *OrderbookBranch {
 	var o OrderbookBranch
+	ctx, cancel := context.WithCancel(context.Background())
+	o.cancel = &cancel
 	o.Market = strings.ToLower(symbol)
-	go o.maintain(symbol)
+	go o.maintain(ctx, symbol)
 	return &o
 }
 
-func (o *OrderbookBranch) maintain(symbol string) {
+func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 	var url string = "wss://max-stream.maicoin.com/ws"
-
-	ctx, cancel := context.WithCancel(context.Background())
-	o.cancel = &cancel
-	o.ctx = ctx
 
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -84,7 +81,7 @@ func (o *OrderbookBranch) maintain(symbol string) {
 mainloop:
 	for {
 		select {
-		case <-o.ctx.Done():
+		case <-ctx.Done():
 			o.conn.Close()
 			break mainloop
 		default:
@@ -130,7 +127,7 @@ mainloop:
 
 	o.onErrBranch.mutex.RLock()
 	if o.onErrBranch.onErr {
-		o.maintain(symbol)
+		o.maintain(ctx, symbol)
 	}
 	o.onErrBranch.mutex.RUnlock()
 }

@@ -1,6 +1,7 @@
 package maxapi
 
 import (
+	"context"
 	"crypto/hmac"
 	"crypto/sha256"
 	"encoding/hex"
@@ -15,7 +16,7 @@ import (
 	"github.com/gorilla/websocket"
 )
 
-func (Mc *MaxClient) PriviateWebsocket() {
+func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 	var url string = "wss://max-stream.maicoin.com/ws"
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -37,10 +38,10 @@ func (Mc *MaxClient) PriviateWebsocket() {
 	defer conn.Close()
 
 	// mainloop
-	mainloop:
+mainloop:
 	for {
 		select {
-		case <-Mc.ctx.Done():
+		case <-ctx.Done():
 			Mc.WsClient.OnErr = false
 			Mc.ShutDown()
 			return
@@ -89,7 +90,7 @@ func (Mc *MaxClient) PriviateWebsocket() {
 		Mc.WsClient.TmpBranch.mux.Lock()
 		Mc.WsClient.TmpBranch.Orders = Mc.ReadOrders()
 		Mc.WsClient.TmpBranch.mux.Unlock()
-		Mc.PriviateWebsocket()
+		Mc.PriviateWebsocket(ctx)
 	}
 	Mc.WsClient.onErrMutex.RUnlock()
 }

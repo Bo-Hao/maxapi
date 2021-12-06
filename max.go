@@ -10,45 +10,58 @@ import (
 	"time"
 )
 
-func (Mc *MaxClient) Run() {
+func (Mc *MaxClient) Run(ctx context.Context) {
 	go func() {
-		Mc.PriviateWebsocket()
+		Mc.PriviateWebsocket(ctx)
 	}()
 
 	go func() {
 		for {
-			Mc.ShutingBranch.mux.RLock()
-			if Mc.ShutingBranch.shut {
+			select {
+			case <-ctx.Done():
 				Mc.ShutDown()
-			}
-			Mc.ShutingBranch.mux.RUnlock()
+				return
+			default:
+				Mc.ShutingBranch.mux.RLock()
+				if Mc.ShutingBranch.shut {
+					Mc.ShutDown()
+				}
+				Mc.ShutingBranch.mux.RUnlock()
 
-			_, err := Mc.GetBalance()
-			if err != nil {
-				LogWarningToDailyLogFile(err, ". in routine checking")
+				_, err := Mc.GetBalance()
+				if err != nil {
+					LogWarningToDailyLogFile(err, ". in routine checking")
+				}
+
+				_, err = Mc.GetAllOrders()
+				if err != nil {
+					LogWarningToDailyLogFile(err, ". in routine checking")
+				}
+				time.Sleep(300 * time.Second)
 			}
 
-			_, err = Mc.GetAllOrders()
-			if err != nil {
-				LogWarningToDailyLogFile(err, ". in routine checking")
-			}
-			time.Sleep(300 * time.Second)
 		}
 	}()
 
 	go func() {
 		for {
-			Mc.ShutingBranch.mux.RLock()
-			if Mc.ShutingBranch.shut {
+			select {
+			case <-ctx.Done():
 				Mc.ShutDown()
-			}
-			Mc.ShutingBranch.mux.RUnlock()
+				return
+			default:
+				Mc.ShutingBranch.mux.RLock()
+				if Mc.ShutingBranch.shut {
+					Mc.ShutDown()
+				}
+				Mc.ShutingBranch.mux.RUnlock()
 
-			_, err := Mc.GetMarkets()
-			if err != nil {
-				LogWarningToDailyLogFile(err, ". in routine checking")
+				_, err := Mc.GetMarkets()
+				if err != nil {
+					LogWarningToDailyLogFile(err, ". in routine checking")
+				}
+				time.Sleep(12 * time.Hour)
 			}
-			time.Sleep(12 * time.Hour)
 		}
 	}()
 
@@ -76,7 +89,8 @@ func NewMaxClient(APIKEY, APISECRET string, ctx context.Context) *MaxClient {
 	m := MaxClient{}
 	m.apiKey = APIKEY
 	m.apiSecret = APISECRET
-	m.ctx = ctx
+	ctx, cancel := context.WithCancel(ctx)
+	m.cancelFunc = &cancel
 	//m.cancelFunc = cancel
 	m.ShutingBranch.shut = false
 	m.ApiClient = apiclient
@@ -92,7 +106,7 @@ func NewMaxClient(APIKEY, APISECRET string, ctx context.Context) *MaxClient {
 func (Mc *MaxClient) ShutDown() {
 	fmt.Println("Shut Down the program")
 	Mc.CancelAllOrders()
-	Mc.cancelFunc()
+	(*Mc.cancelFunc)()
 
 	Mc.ShutingBranch.mux.Lock()
 	Mc.ShutingBranch.shut = true
