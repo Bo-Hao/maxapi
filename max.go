@@ -32,7 +32,7 @@ func (Mc *MaxClient) Run() {
 			if err != nil {
 				LogWarningToDailyLogFile(err, ". in routine checking")
 			}
-			time.Sleep(60 * time.Second)
+			time.Sleep(300 * time.Second)
 		}
 	}()
 
