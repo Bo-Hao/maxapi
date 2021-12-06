@@ -4,26 +4,27 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+	"strings"
 )
 
-func (Mc *MaxClient) ApiGetAccount() (Member, error) {
+func (Mc *MaxClient) GetAccount() (Member, error) {
 	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(Mc.ctx, Mc.apiKey, Mc.apiSecret)
 	if err != nil {
 		fmt.Println(err)
 		return Member{}, errors.New("fail to get account")
 	}
-	Mc.accountMutex.Lock()
-	Mc.Account = member
-	Mc.accountMutex.Unlock()
+	Mc.AccountBranch.mux.Lock()
+	Mc.AccountBranch.Account = member
+	Mc.AccountBranch.mux.Unlock()
 	return member, nil
 }
 
-func (Mc *MaxClient) ApiGetBalance() (map[string]Balance, error) {
+// Get balance into a map with key denote asset. 
+func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 	localbalance := map[string]Balance{}
 
 	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(Mc.ctx, Mc.apiKey, Mc.apiSecret)
 	if err != nil {
-		fmt.Println(err)
 		return map[string]Balance{}, errors.New("fail to get balance")
 	}
 	Accounts := member.Accounts
@@ -48,10 +49,15 @@ func (Mc *MaxClient) ApiGetBalance() (map[string]Balance, error) {
 		localbalance[currency] = b
 	}
 
+	Mc.BalanceBranch.mux.Lock()
+	Mc.BalanceBranch.Balance = localbalance
+	defer Mc.BalanceBranch.mux.Unlock()
+
 	return localbalance, nil
 }
 
-func (Mc *MaxClient) ApiGetOrders(market string) (map[int32]WsOrder, error) {
+// Get orders of the coresponding $market 
+func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, market, nil)
 	if err != nil {
 		return map[int32]WsOrder{}, errors.New("fail to get order list")
@@ -63,12 +69,59 @@ func (Mc *MaxClient) ApiGetOrders(market string) (map[int32]WsOrder, error) {
 		wsOrders[order.Id] = order
 	}
 
+	Mc.OrdersBranch.mux.Lock()
+	defer Mc.OrdersBranch.mux.Unlock()
+	oldOrders := Mc.OrdersBranch.Orders
+	for key, value := range oldOrders{
+		if _, ok := wsOrders[key]; !ok && strings.EqualFold(value.Market, market){
+			delete(oldOrders, key)
+		}else if ok {
+			oldOrders[key] = wsOrders[key]
+		}
+	}
+	Mc.OrdersBranch.Orders = oldOrders
+	
+
 	return wsOrders, nil
 }
 
+// Get orders of all markets. 
+func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
+	newOrders := map[int32]WsOrder{}
+
+	markets := Mc.ReadMarkets()
+	for i := 0; i < len(markets); i++ {
+		marketId := markets[i].Id
+		orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(Mc.ctx, Mc.apiKey, Mc.apiSecret, marketId, nil)
+		if err != nil {
+			return map[int32]WsOrder{}, errors.New("fail to get order list")
+		}
+
+		for j := 0; j < len(orders); j++ {
+			newOrders[orders[j].Id] = WsOrder(orders[j])
+		}
+	}
+
+	Mc.OrdersBranch.mux.Lock()
+	defer Mc.OrdersBranch.mux.Unlock()
+	Mc.OrdersBranch.Orders = newOrders
+	return newOrders, nil
+}
+
+func (Mc *MaxClient) GetMarkets() ([]Market, error) {
+	Mc.MarketsBranch.mux.RLock()
+	defer Mc.MarketsBranch.mux.RUnlock()
+	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(Mc.ctx)
+	if err != nil {
+		return []Market{}, errors.New("fail to get market")
+	}
+	Mc.MarketsBranch.Markets= markets
+	return markets, nil
+}
+
 func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
-	Mc.limitOrdersMutex.Lock()
-	defer Mc.limitOrdersMutex.Unlock()
+	Mc.OrdersBranch.mux.Lock()
+	defer Mc.OrdersBranch.mux.Unlock()
 	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(Mc.ctx, Mc.apiKey, Mc.apiSecret, nil)
 	if err != nil {
 		return []WsOrder{}, errors.New("fail to cancel all orders")
@@ -123,11 +176,9 @@ func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
 	Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order
 
 	//del partial fill order those in map
-	Mc.filledOrdersMutex.Lock()
-
-	delete(Mc.PartialFilledOrders, order.Id)
-
-	Mc.filledOrdersMutex.Unlock()
+	Mc.FilledOrdersBranch.mux.Lock()
+	defer Mc.FilledOrdersBranch.mux.Unlock()
+	delete(Mc.FilledOrdersBranch.Partial, order.Id)
 
 	return WsOrder(CanceledOrder), nil
 }
@@ -175,12 +226,12 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 	}
 
 	//del partial fill order those in map
-	Mc.filledOrdersMutex.Lock()
+	Mc.FilledOrdersBranch.mux.Lock()
+	defer Mc.FilledOrdersBranch.mux.Unlock()
 	for i := 0; i < len(cancelOrdersKey); i++ {
-		delete(Mc.PartialFilledOrders, cancelOrdersKey[i])
+		delete(Mc.FilledOrdersBranch.Partial, cancelOrdersKey[i])
 	}
-	Mc.filledOrdersMutex.Unlock()
-
+	
 	return canceledWsOrders, nil
 }
 

@@ -9,12 +9,13 @@ import (
 	"log"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
 )
 
-func (Mc *MaxClient) SubscribeWS() {
+func (Mc *MaxClient) PriviateWebsocket() {
 	var url string = "wss://max-stream.maicoin.com/ws"
 	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
 	if err != nil {
@@ -36,14 +37,15 @@ func (Mc *MaxClient) SubscribeWS() {
 	defer conn.Close()
 
 	// mainloop
+	mainloop:
 	for {
-		Mc.WsClient.onErrMutex.Lock()
 		select {
 		case <-Mc.ctx.Done():
 			Mc.WsClient.OnErr = false
 			Mc.ShutDown()
 			return
 		default:
+			Mc.WsClient.onErrMutex.Lock()
 			if Mc.WsClient.Conn == nil {
 				Mc.WsClient.OnErr = true
 				message := "max websocket reconnecting"
@@ -65,19 +67,18 @@ func (Mc *MaxClient) SubscribeWS() {
 				Mc.WsClient.OnErr = true
 			}
 
-			errh := Mc.handleMAXSocketMsg(msg)
+			errh := Mc.handleMaxSocketMsg(msg)
 			if errh != nil {
 				Mc.WsClient.OnErr = true
 				message := "max websocket reconnecting"
 				LogInfoToDailyLogFile(message)
 			}
 			Mc.WsClient.onErrMutex.Unlock()
-			time.Sleep(1 * time.Second)
 		} // end select
 
 		// if there is something wrong that the WS should be reconnected.
 		if Mc.WsClient.OnErr {
-			break
+			break mainloop
 		}
 	} // end for
 
@@ -85,10 +86,10 @@ func (Mc *MaxClient) SubscribeWS() {
 	// if it is manual work.
 	Mc.WsClient.onErrMutex.RLock()
 	if Mc.WsClient.OnErr {
-		Mc.WsClient.TmpOrdersMutex.Lock()
-		Mc.WsClient.TmpOrders = Mc.LimitOrders
-		Mc.WsClient.TmpOrdersMutex.Unlock()
-		Mc.SubscribeWS()
+		Mc.WsClient.TmpBranch.mux.Lock()
+		Mc.WsClient.TmpBranch.Orders = Mc.ReadOrders()
+		Mc.WsClient.TmpBranch.mux.Unlock()
+		Mc.PriviateWebsocket()
 	}
 	Mc.WsClient.onErrMutex.RUnlock()
 }
@@ -140,7 +141,7 @@ func GetMaxSubscribePrivateMessage(apikey, apisecret string) ([]byte, error) {
 
 // ##### #####
 
-func (Mc *MaxClient) handleMAXSocketMsg(msg []byte) error {
+func (Mc *MaxClient) handleMaxSocketMsg(msg []byte) error {
 	var msgMap map[string]interface{}
 	err := json.Unmarshal(msg, &msgMap)
 	if err != nil {
@@ -171,6 +172,8 @@ func (Mc *MaxClient) handleMAXSocketMsg(msg []byte) error {
 		err2 = Mc.parseTradeUpdateMsg(msgMap)
 	case "account_update":
 		err2 = Mc.parseAccountMsg(msgMap)
+	default:
+		err2 = errors.New("event not exist")
 	}
 	if err2 != nil {
 		return errors.New("fail to parse message")
@@ -206,30 +209,30 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 	var wsOrders []WsOrder
 	json.Unmarshal(jsonbody, &wsOrders)
 
-	Mc.limitOrdersMutex.Lock()
-	defer Mc.limitOrdersMutex.Unlock()
-	Mc.filledOrdersMutex.Lock()
-	defer Mc.filledOrdersMutex.Unlock()
+	Mc.OrdersBranch.mux.Lock()
+	defer Mc.OrdersBranch.mux.Unlock()
+	Mc.FilledOrdersBranch.mux.Lock()
+	defer Mc.FilledOrdersBranch.mux.Unlock()
 
 	for i := 0; i < len(wsOrders); i++ {
-		if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
-			Mc.LimitOrders[wsOrders[i].Id] = wsOrders[i]
+		if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
+			Mc.OrdersBranch.Orders[wsOrders[i].Id] = wsOrders[i]
 			//fmt.Println("new order arrived: ", wsOrders[i])
 		} else {
 			switch wsOrders[i].State {
 			case "cancel":
 				//fmt.Println("order canceled: ", wsOrders[i])
-				delete(Mc.LimitOrders, wsOrders[i].Id)
+				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
 			case "done":
 				//fmt.Println("order done: ", wsOrders[i])
-				Mc.FilledOrders[wsOrders[i].Id] = wsOrders[i]
-				delete(Mc.LimitOrders, wsOrders[i].Id)
+				Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
+				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
 			default:
 				//fmt.Println("order partial fill: ", wsOrders[i])
-				if _, ok := Mc.LimitOrders[wsOrders[i].Id]; !ok {
-					Mc.LimitOrders[wsOrders[i].Id] = wsOrders[i]
+				if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
+					Mc.OrdersBranch.Orders[wsOrders[i].Id] = wsOrders[i]
 				}
-				Mc.FilledOrders[wsOrders[i].Id] = wsOrders[i]
+				Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
 			}
 		}
 	}
@@ -247,21 +250,21 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 }
 
 func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
-	Mc.limitOrdersMutex.Lock()
-	defer Mc.limitOrdersMutex.Unlock()
-	Mc.WsClient.TmpOrdersMutex.Lock()
-	defer Mc.WsClient.TmpOrdersMutex.Unlock()
+	Mc.OrdersBranch.mux.Lock()
+	defer Mc.OrdersBranch.mux.Unlock()
+	Mc.WsClient.TmpBranch.mux.Lock()
+	defer Mc.WsClient.TmpBranch.mux.Unlock()
 
 	// if there is not orders in the tmp memory, it is not possible to track the trades during WS is disconnected.
-	if len(Mc.WsClient.TmpOrders) == 0 {
-		Mc.LimitOrders = snapshotWsOrders
+	if len(Mc.WsClient.TmpBranch.Orders) == 0 {
+		Mc.UpdateOrders(snapshotWsOrders)
 		return nil
 	}
 
 	untrackedWsOrders := map[int32]WsOrder{}
 	trackedWsOrders := map[int32]WsOrder{}
 
-	for wsorderId, wsorder := range Mc.WsClient.TmpOrders {
+	for wsorderId, wsorder := range Mc.WsClient.TmpBranch.Orders {
 		if _, ok := snapshotWsOrders[wsorderId]; ok && wsorder.State != "Done" {
 			trackedWsOrders[wsorderId] = wsorder
 		} else {
@@ -269,13 +272,13 @@ func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
 		}
 	}
 
-	Mc.LimitOrders = trackedWsOrders
+	Mc.UpdateOrders(trackedWsOrders)
 
-	Mc.filledOrdersMutex.Lock()
-	defer Mc.filledOrdersMutex.Unlock()
+	Mc.FilledOrdersBranch.mux.Lock()
+	defer Mc.FilledOrdersBranch.mux.Unlock()
 	for id, odr := range untrackedWsOrders {
-		if _, ok := Mc.FilledOrders[id]; !ok {
-			Mc.FilledOrders[id] = odr
+		if _, ok := Mc.FilledOrdersBranch.Filled[id]; !ok {
+			Mc.FilledOrdersBranch.Filled[id] = odr
 		}
 	}
 
@@ -306,8 +309,8 @@ type Trade struct {
 // Account
 //	account_snapshot and //	account_update
 func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
-	Mc.localBalanceMutex.Lock()
-	defer Mc.localBalanceMutex.Unlock()
+	Mc.BalanceBranch.mux.Lock()
+	defer Mc.BalanceBranch.mux.Unlock()
 	switch reflect.TypeOf(msgMap["B"]).Kind() {
 	case reflect.Slice:
 		s := reflect.ValueOf(msgMap["B"])
@@ -330,7 +333,7 @@ func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
 				Avaliable: wsBalance,
 				Locked:    wsLocked,
 			}
-			Mc.LocalBalance[b.Name] = b
+			Mc.BalanceBranch.Balance[b.Name] = b
 		} // end for
 	} // end switch
 
@@ -338,7 +341,7 @@ func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
 }
 
 func sellbuyTransfer(side string) (string, error) {
-	switch side {
+	switch strings.ToLower(side) {
 	case "sell":
 		return "sell", nil
 	case "buy":
