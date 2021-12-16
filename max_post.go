@@ -13,13 +13,13 @@ func (Mc *MaxClient) GetAccount() (Member, error) {
 	if err != nil {
 		return Member{}, errors.New("fail to get account")
 	}
-	Mc.AccountBranch.mux.Lock()
+	Mc.AccountBranch.Lock()
 	Mc.AccountBranch.Account = member
-	Mc.AccountBranch.mux.Unlock()
+	Mc.AccountBranch.Unlock()
 	return member, nil
 }
 
-// Get balance into a map with key denote asset. 
+// Get balance into a map with key denote asset.
 func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 	localbalance := map[string]Balance{}
 
@@ -49,14 +49,14 @@ func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 		localbalance[currency] = b
 	}
 
-	Mc.BalanceBranch.mux.Lock()
+	Mc.BalanceBranch.Lock()
 	Mc.BalanceBranch.Balance = localbalance
-	defer Mc.BalanceBranch.mux.Unlock()
+	defer Mc.BalanceBranch.Unlock()
 
 	return localbalance, nil
 }
 
-// Get orders of the coresponding $market 
+// Get orders of the coresponding $market
 func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, nil)
 	if err != nil {
@@ -69,23 +69,22 @@ func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 		wsOrders[order.Id] = order
 	}
 
-	Mc.OrdersBranch.mux.Lock()
-	defer Mc.OrdersBranch.mux.Unlock()
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
 	oldOrders := Mc.OrdersBranch.Orders
-	for key, value := range oldOrders{
-		if _, ok := wsOrders[key]; !ok && strings.EqualFold(value.Market, market){
+	for key, value := range oldOrders {
+		if _, ok := wsOrders[key]; !ok && strings.EqualFold(value.Market, market) {
 			delete(oldOrders, key)
-		}else if ok {
+		} else if ok {
 			oldOrders[key] = wsOrders[key]
 		}
 	}
 	Mc.OrdersBranch.Orders = oldOrders
-	
 
 	return wsOrders, nil
 }
 
-// Get orders of all markets. 
+// Get orders of all markets.
 func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 	newOrders := map[int32]WsOrder{}
 
@@ -102,33 +101,34 @@ func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 		}
 	}
 
-	Mc.OrdersBranch.mux.Lock()
-	defer Mc.OrdersBranch.mux.Unlock()
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
 	Mc.OrdersBranch.Orders = newOrders
 	return newOrders, nil
 }
 
 func (Mc *MaxClient) GetMarkets() ([]Market, error) {
-	Mc.MarketsBranch.mux.RLock()
-	defer Mc.MarketsBranch.mux.RUnlock()
+	Mc.MarketsBranch.RLock()
+	defer Mc.MarketsBranch.RUnlock()
 	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(context.Background())
 	if err != nil {
 		return []Market{}, errors.New("fail to get market")
 	}
-	Mc.MarketsBranch.Markets= markets
+	Mc.MarketsBranch.Markets = markets
 	return markets, nil
 }
 
 func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
-	Mc.OrdersBranch.mux.Lock()
-	defer Mc.OrdersBranch.mux.Unlock()
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
 	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(context.Background(), Mc.apiKey, Mc.apiSecret, nil)
 	if err != nil {
 		return []WsOrder{}, errors.New("fail to cancel all orders")
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
-
-	LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders by CancelAllOrders.")
+	if len(canceledOrders) > 0 {
+		LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders by CancelAllOrders.")
+	}
 
 	// data update
 	// local balance update
@@ -176,8 +176,8 @@ func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
 	Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order
 
 	//del partial fill order those in map
-	Mc.FilledOrdersBranch.mux.Lock()
-	defer Mc.FilledOrdersBranch.mux.Unlock()
+	Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock()
 	delete(Mc.FilledOrdersBranch.Partial, order.Id)
 
 	return WsOrder(CanceledOrder), nil
@@ -198,11 +198,14 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 
 	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(context.Background(), Mc.apiKey, Mc.apiSecret, params)
 	if err != nil {
+		fmt.Println(err)
 		return []WsOrder{}, errors.New("fail to cancel orders")
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
 
-	LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders.")
+	if len(canceledOrders) > 0 {
+		LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders.")
+	}
 
 	// local balance update
 	cancelOrdersKey := []int32{}
@@ -226,12 +229,12 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 	}
 
 	//del partial fill order those in map
-	Mc.FilledOrdersBranch.mux.Lock()
-	defer Mc.FilledOrdersBranch.mux.Unlock()
+	Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock()
 	for i := 0; i < len(cancelOrdersKey); i++ {
 		delete(Mc.FilledOrdersBranch.Partial, cancelOrdersKey[i])
 	}
-	
+
 	return canceledWsOrders, nil
 }
 

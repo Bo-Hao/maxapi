@@ -22,11 +22,11 @@ func (Mc *MaxClient) Run(ctx context.Context) {
 				Mc.ShutDown()
 				return
 			default:
-				Mc.ShutingBranch.mux.RLock()
+				Mc.ShutingBranch.RLock()
 				if Mc.ShutingBranch.shut {
 					Mc.ShutDown()
 				}
-				Mc.ShutingBranch.mux.RUnlock()
+				Mc.ShutingBranch.RUnlock()
 
 				_, err := Mc.GetBalance()
 				if err != nil {
@@ -37,7 +37,7 @@ func (Mc *MaxClient) Run(ctx context.Context) {
 				if err != nil {
 					LogWarningToDailyLogFile(err, ". in routine checking")
 				}
-				time.Sleep(300 * time.Second)
+				time.Sleep(60 * time.Second)
 			}
 
 		}
@@ -50,11 +50,11 @@ func (Mc *MaxClient) Run(ctx context.Context) {
 				Mc.ShutDown()
 				return
 			default:
-				Mc.ShutingBranch.mux.RLock()
+				Mc.ShutingBranch.RLock()
 				if Mc.ShutingBranch.shut {
 					Mc.ShutDown()
 				}
-				Mc.ShutingBranch.mux.RUnlock()
+				Mc.ShutingBranch.RUnlock()
 
 				_, err := Mc.GetMarkets()
 				if err != nil {
@@ -69,14 +69,12 @@ func (Mc *MaxClient) Run(ctx context.Context) {
 	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
 	go func() {
 		<-c
-		fmt.Println("Ctrl + C is pressed")
+		fmt.Println("Ctrl + C Pressed: shutting max websocket")
 		Mc.ShutDown()
 	}()
 }
 
-func NewMaxClient(APIKEY, APISECRET string, ctx context.Context) *MaxClient {
-	//ctx, cancel := context.WithCancel(context.Background())
-
+func NewMaxClient(ctx context.Context, APIKEY, APISECRET string) *MaxClient {
 	// api client
 	cfg := NewConfiguration()
 	apiclient := NewAPIClient(cfg)
@@ -89,16 +87,16 @@ func NewMaxClient(APIKEY, APISECRET string, ctx context.Context) *MaxClient {
 	m := MaxClient{}
 	m.apiKey = APIKEY
 	m.apiSecret = APISECRET
-	ctx, cancel := context.WithCancel(ctx)
+	_, cancel := context.WithCancel(ctx)
 	m.cancelFunc = &cancel
 	//m.cancelFunc = cancel
 	m.ShutingBranch.shut = false
 	m.ApiClient = apiclient
-	m.OrdersBranch.Orders = map[int32]WsOrder{}
-	m.FilledOrdersBranch.Partial = map[int32]WsOrder{}
-	m.FilledOrdersBranch.Filled = map[int32]WsOrder{}
+	m.OrdersBranch.Orders = make(map[int32]WsOrder)
+	m.FilledOrdersBranch.Partial = make(map[int32]WsOrder)
+	m.FilledOrdersBranch.Filled = make(map[int32]WsOrder)
 	m.MarketsBranch.Markets = markets
-	m.BalanceBranch.Balance = map[string]Balance{}
+	m.BalanceBranch.Balance = make(map[string]Balance)
 
 	return &m
 }
@@ -108,9 +106,9 @@ func (Mc *MaxClient) ShutDown() {
 	Mc.CancelAllOrders()
 	(*Mc.cancelFunc)()
 
-	Mc.ShutingBranch.mux.Lock()
+	Mc.ShutingBranch.Lock()
 	Mc.ShutingBranch.shut = true
-	Mc.ShutingBranch.mux.Unlock()
+	Mc.ShutingBranch.Unlock()
 	time.Sleep(3 * time.Second)
 	os.Exit(1)
 }
@@ -118,16 +116,16 @@ func (Mc *MaxClient) ShutDown() {
 // Detect if there is Unhedge position.
 func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 	// check if there is filled order but not hedged.
-	Mc.FilledOrdersBranch.mux.RLock()
+	Mc.FilledOrdersBranch.RLock()
 	filledLen := len(Mc.FilledOrdersBranch.Filled)
-	Mc.FilledOrdersBranch.mux.RUnlock()
+	Mc.FilledOrdersBranch.RUnlock()
 	if filledLen == 0 {
 		return map[string]HedgingOrder{}, false
 	}
 	hedgingOrders := map[string]HedgingOrder{}
 
-	Mc.FilledOrdersBranch.mux.Lock()
-	defer Mc.FilledOrdersBranch.mux.Unlock()
+	Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock()
 
 	for _, order := range Mc.FilledOrdersBranch.Filled {
 		preEv := 0.
@@ -158,7 +156,7 @@ func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 			s = -1.
 		}
 
-		timestamp := int32(time.Now().UnixMilli())
+		
 
 		if hedgingOrder, ok := hedgingOrders[market]; ok {
 			hedgingOrder.Profit += price * volume * s
@@ -176,7 +174,7 @@ func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 				Profit:    price * volume * s,
 				Volume:    volume * s,
 				AbsVolume: volume,
-				Timestamp: timestamp,
+				Timestamp: int32(time.Now().UnixMilli()),
 			}
 			hedgingOrders[market] = ho
 		}

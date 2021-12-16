@@ -15,19 +15,19 @@ type MaxClient struct {
 	cancelFunc    *context.CancelFunc
 	ShutingBranch struct {
 		shut bool
-		mux  sync.RWMutex
+		sync.RWMutex
 	}
 
 	// CXMM parameters
 	BaseOrderUnitBranch struct {
 		BaseOrderUnit string
-		mux           sync.RWMutex
+		sync.RWMutex
 	}
 
 	// exchange information
 	ExchangeInfoBranch struct {
 		ExInfo ExchangeInfo
-		mux    sync.RWMutex
+		sync.RWMutex
 	}
 
 	// web socket client
@@ -35,16 +35,17 @@ type MaxClient struct {
 		OnErr      bool
 		onErrMutex sync.RWMutex
 		Conn       *websocket.Conn
+		connMutex  sync.Mutex
 
 		LastUpdatedIdBranch struct {
 			LastUpdatedId decimal.Decimal
-			mux           sync.RWMutex
+			sync.RWMutex
 		}
 
 		TmpBranch struct {
 			Trades []Trade
 			Orders map[int32]WsOrder
-			mux    sync.RWMutex
+			sync.RWMutex
 		}
 	}
 
@@ -54,32 +55,32 @@ type MaxClient struct {
 	// limit unfilled orders
 	OrdersBranch struct {
 		Orders map[int32]WsOrder
-		mux    sync.RWMutex
+		sync.RWMutex
 	}
 
 	// filled orders
 	FilledOrdersBranch struct {
 		Filled  map[int32]WsOrder
 		Partial map[int32]WsOrder
-		mux     sync.RWMutex
+		sync.RWMutex
 	}
 
 	// All markets pairs
 	MarketsBranch struct {
 		Markets []Market
-		mux     sync.RWMutex
+		sync.RWMutex
 	}
 
 	// Account
 	AccountBranch struct {
 		Account Member
-		mux     sync.RWMutex
+		sync.RWMutex
 	}
 
 	// local balance
 	BalanceBranch struct {
 		Balance map[string]Balance // currency balance
-		mux     sync.RWMutex
+		sync.RWMutex
 	}
 }
 
@@ -94,7 +95,6 @@ type Balance struct {
 	Avaliable float64
 	Locked    float64
 }
-
 
 // check the hedge position
 type HedgingOrder struct {

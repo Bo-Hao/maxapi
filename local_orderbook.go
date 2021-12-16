@@ -78,12 +78,12 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 		LogFatalToDailyLogFile(errors.New("fail to subscribe websocket"))
 	}
 
-mainloop:
-	for {
+	NoErr:= true
+	for NoErr {
 		select {
 		case <-ctx.Done():
 			o.conn.Close()
-			break mainloop
+			return
 		default:
 			_, msg, err := o.conn.ReadMessage()
 			if err != nil {
@@ -91,8 +91,6 @@ mainloop:
 				o.onErrBranch.mutex.Lock()
 				o.onErrBranch.onErr = true
 				o.onErrBranch.mutex.Unlock()
-				message := "max websocket reconnecting"
-				LogInfoToDailyLogFile(message)
 			}
 
 			var msgMap map[string]interface{}
@@ -109,27 +107,24 @@ mainloop:
 				o.onErrBranch.mutex.Lock()
 				o.onErrBranch.onErr = true
 				o.onErrBranch.mutex.Unlock()
-				message := "max websocket reconnecting"
-				LogInfoToDailyLogFile(message)
 			}
 
-			//time.Sleep(1 * time.Second)
 		} // end select
 
 		// if there is something wrong that the WS should be reconnected.
-		o.onErrBranch.mutex.Lock()
 		if o.onErrBranch.onErr {
-			break
+			message := "max websocket reconnecting"
+			LogInfoToDailyLogFile(message)
+			NoErr = false
 		}
-		o.onErrBranch.mutex.Unlock()
 	} // end for
 	o.conn.Close()
 
-	o.onErrBranch.mutex.RLock()
-	if o.onErrBranch.onErr {
-		o.maintain(ctx, symbol)
+	
+	if !o.onErrBranch.onErr {
+		return
 	}
-	o.onErrBranch.mutex.RUnlock()
+	o.maintain(ctx, symbol)
 }
 
 // default for the depth 10.

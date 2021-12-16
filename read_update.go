@@ -1,86 +1,91 @@
 package maxapi
 
-import "errors"
+import (
+	"errors"
+)
 
 func (Mc *MaxClient) ReadBaseOrderUnit() string {
-	Mc.BaseOrderUnitBranch.mux.RLock()
-	defer Mc.BaseOrderUnitBranch.mux.RUnlock()
+	Mc.BaseOrderUnitBranch.RLock()
+	defer Mc.BaseOrderUnitBranch.RUnlock()
 	BaseOrderUnit := Mc.BaseOrderUnitBranch.BaseOrderUnit
 
 	return BaseOrderUnit
 }
 
 func (Mc *MaxClient) ReadExchangeInfo() ExchangeInfo {
-	Mc.ExchangeInfoBranch.mux.RLock()
-	defer Mc.ExchangeInfoBranch.mux.RUnlock()
-	return Mc.ExchangeInfoBranch.ExInfo
+	Mc.ExchangeInfoBranch.RLock()
+	E := Mc.ExchangeInfoBranch.ExInfo
+	Mc.ExchangeInfoBranch.RUnlock()
+	return E
 }
 
 func (Mc *MaxClient) ReadOrders() map[int32]WsOrder {
-	Mc.OrdersBranch.mux.RLock()
-	defer Mc.OrdersBranch.mux.RUnlock()
-	return Mc.OrdersBranch.Orders
+	Mc.OrdersBranch.RLock()
+	orders := Mc.OrdersBranch.Orders
+	Mc.OrdersBranch.RUnlock()
+
+	return orders
 }
 
 func (Mc *MaxClient) ReadFilledOrders() map[int32]WsOrder {
-	Mc.FilledOrdersBranch.mux.RLock()
-	defer Mc.FilledOrdersBranch.mux.RUnlock()
+	Mc.FilledOrdersBranch.RLock()
+	defer Mc.FilledOrdersBranch.RUnlock()
 	return Mc.FilledOrdersBranch.Filled
 }
 
 func (Mc *MaxClient) ReadPartialFilledOrders() map[int32]WsOrder {
-	Mc.FilledOrdersBranch.mux.RLock()
-	defer Mc.FilledOrdersBranch.mux.RUnlock()
+	Mc.FilledOrdersBranch.RLock()
+	defer Mc.FilledOrdersBranch.RUnlock()
 	return Mc.FilledOrdersBranch.Partial
 }
 
 func (Mc *MaxClient) ReadBalance() map[string]Balance {
-	Mc.BalanceBranch.mux.RLock()
-	defer Mc.BalanceBranch.mux.RUnlock()
+	Mc.BalanceBranch.RLock()
+	defer Mc.BalanceBranch.RUnlock()
 	return Mc.BalanceBranch.Balance
 }
 
 func (Mc *MaxClient) ReadMarkets() []Market {
-	Mc.MarketsBranch.mux.RLock()
-	defer Mc.MarketsBranch.mux.RUnlock()
+	Mc.MarketsBranch.RLock()
+	defer Mc.MarketsBranch.RUnlock()
 	return Mc.MarketsBranch.Markets
 }
 
 // update part
 
 func (Mc *MaxClient) UpdateBaseOrderUnit(Unit string) {
-	Mc.BaseOrderUnitBranch.mux.Lock()
-	defer Mc.BaseOrderUnitBranch.mux.Unlock()
+	Mc.BaseOrderUnitBranch.Lock()
+	defer Mc.BaseOrderUnitBranch.Unlock()
 	Mc.BaseOrderUnitBranch.BaseOrderUnit = Unit
 }
 
 func (Mc *MaxClient) UpdateExchangeInfo(exInfo ExchangeInfo) {
-	Mc.ExchangeInfoBranch.mux.Lock()
-	defer Mc.ExchangeInfoBranch.mux.Unlock()
+	Mc.ExchangeInfoBranch.Lock()
+	defer Mc.ExchangeInfoBranch.Unlock()
 	Mc.ExchangeInfoBranch.ExInfo = exInfo
 }
 
 func (Mc *MaxClient) UpdateOrders(wsOrders map[int32]WsOrder) {
-	Mc.OrdersBranch.mux.Lock()
-	defer Mc.OrdersBranch.mux.Unlock()
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
 	Mc.OrdersBranch.Orders = wsOrders
 }
 
 func (Mc *MaxClient) UpdateFilledOrders(wsOrders map[int32]WsOrder) {
-	Mc.FilledOrdersBranch.mux.Lock()
-	defer Mc.FilledOrdersBranch.mux.Unlock()
+	Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock()
 	Mc.FilledOrdersBranch.Filled = wsOrders
 }
 
 func (Mc *MaxClient) UpdatePartialFilledOrders(wsOrders map[int32]WsOrder) {
-	Mc.FilledOrdersBranch.mux.Lock()
-	defer Mc.FilledOrdersBranch.mux.Unlock()
+	Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock()
 	Mc.FilledOrdersBranch.Partial = wsOrders
 }
 
 func (Mc *MaxClient) UpdateBalance(balances map[string]Balance) {
-	Mc.BalanceBranch.mux.Lock()
-	defer Mc.BalanceBranch.mux.Unlock()
+	Mc.BalanceBranch.Lock()
+	defer Mc.BalanceBranch.Unlock()
 	Mc.BalanceBranch.Balance = balances
 }
 
@@ -102,8 +107,8 @@ func (Mc *MaxClient) checkBaseQuote(market string) (base, quote string, err erro
 
 // volume is the volume of base currency. return true denote enough for trading.
 func (Mc *MaxClient) checkBalanceEnoughLocal(market, side string, price, volume float64) (enough bool) {
-	Mc.BalanceBranch.mux.RLock()
-	defer Mc.BalanceBranch.mux.RUnlock()
+	Mc.BalanceBranch.RLock()
+	defer Mc.BalanceBranch.RUnlock()
 
 	base, quote, err := Mc.checkBaseQuote(market)
 	if err != nil {
@@ -128,8 +133,8 @@ func (Mc *MaxClient) checkBalanceEnoughLocal(market, side string, price, volume 
 }
 
 func (Mc *MaxClient) updateLocalBalance(market, side string, price, volume float64, gain bool) error {
-	Mc.BalanceBranch.mux.Lock()
-	defer Mc.BalanceBranch.mux.Unlock()
+	Mc.BalanceBranch.Lock()
+	defer Mc.BalanceBranch.Unlock()
 	base, quote, err := Mc.checkBaseQuote(market)
 	if err != nil {
 		LogFatalToDailyLogFile(err)
@@ -161,4 +166,3 @@ func (Mc *MaxClient) updateLocalBalance(market, side string, price, volume float
 	}
 	return nil
 }
-

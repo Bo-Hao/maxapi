@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"reflect"
 	"strconv"
@@ -22,7 +23,6 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 	if err != nil {
 		LogFatalToDailyLogFile(err)
 	}
-	LogInfoToDailyLogFile("Connected:", url)
 
 	subMsg, err := GetMaxSubscribePrivateMessage(Mc.apiKey, Mc.apiSecret)
 	if err != nil {
@@ -33,66 +33,64 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 	if err != nil {
 		LogFatalToDailyLogFile(errors.New("fail to subscribe websocket"))
 	}
+	Mc.WsClient.connMutex.Lock()
 	Mc.WsClient.Conn = conn
-	Mc.WsClient.OnErr = false
-	defer conn.Close()
+	Mc.WsClient.connMutex.Unlock()
+
+	LogInfoToDailyLogFile("Connected:", url)
+	Mc.WsOnErrTurn(false)
 
 	// mainloop
-mainloop:
-	for {
+	NoErr := true
+	for NoErr {
 		select {
 		case <-ctx.Done():
-			Mc.WsClient.OnErr = false
+			Mc.WsOnErrTurn(false)
 			Mc.ShutDown()
 			return
 		default:
-			Mc.WsClient.onErrMutex.Lock()
 			if Mc.WsClient.Conn == nil {
-				Mc.WsClient.OnErr = true
-				message := "max websocket reconnecting"
-				LogInfoToDailyLogFile(message)
+				Mc.WsOnErrTurn(true)
 			}
 
 			_, msg, err := conn.ReadMessage()
 			if err != nil {
 				LogErrorToDailyLogFile("read:", err)
-				Mc.WsClient.OnErr = true
-				message := "max websocket reconnecting"
-				LogInfoToDailyLogFile(message)
+				Mc.WsOnErrTurn(true)
 			}
 
 			var msgMap map[string]interface{}
 			err = json.Unmarshal(msg, &msgMap)
 			if err != nil {
 				LogWarningToDailyLogFile(err)
-				Mc.WsClient.OnErr = true
+				Mc.WsOnErrTurn(true)
 			}
 
 			errh := Mc.handleMaxSocketMsg(msg)
 			if errh != nil {
-				Mc.WsClient.OnErr = true
-				message := "max websocket reconnecting"
-				LogInfoToDailyLogFile(message)
+				Mc.WsOnErrTurn(true)
 			}
-			Mc.WsClient.onErrMutex.Unlock()
 		} // end select
 
 		// if there is something wrong that the WS should be reconnected.
 		if Mc.WsClient.OnErr {
-			break mainloop
+			NoErr = false
 		}
 	} // end for
 
 	Mc.WsClient.Conn.Close()
+
 	// if it is manual work.
-	Mc.WsClient.onErrMutex.RLock()
-	if Mc.WsClient.OnErr {
-		Mc.WsClient.TmpBranch.mux.Lock()
-		Mc.WsClient.TmpBranch.Orders = Mc.ReadOrders()
-		Mc.WsClient.TmpBranch.mux.Unlock()
-		Mc.PriviateWebsocket(ctx)
+	if !Mc.WsClient.OnErr {
+		return
 	}
-	Mc.WsClient.onErrMutex.RUnlock()
+	Mc.WsClient.TmpBranch.Lock()
+	Mc.WsClient.TmpBranch.Orders = Mc.ReadOrders()
+	Mc.WsClient.TmpBranch.Unlock()
+
+	message := "max websocket reconnecting"
+	LogInfoToDailyLogFile(message)
+	Mc.PriviateWebsocket(ctx)
 }
 
 func GetMaxSubscribeMessage(product, channel string, symbols []string) ([]byte, error) {
@@ -162,12 +160,14 @@ func (Mc *MaxClient) handleMaxSocketMsg(msg []byte) error {
 	case "authenticated":
 		LogInfoToDailyLogFile("websocket subscribtion authenticated")
 	case "order_snapshot":
+		fmt.Println("snapshot")
 		err2 = Mc.parseOrderSnapshotMsg(msgMap)
 	case "trade_snapshot":
 		err2 = Mc.parseTradeSnapshotMsg(msgMap)
 	case "account_snapshot":
 		err2 = Mc.parseAccountMsg(msgMap)
 	case "order_update":
+		fmt.Println("update")
 		err2 = Mc.parseOrderUpdateMsg(msgMap)
 	case "trade_update":
 		err2 = Mc.parseTradeUpdateMsg(msgMap)
@@ -200,7 +200,6 @@ func (Mc *MaxClient) parseOrderSnapshotMsg(msgMap map[string]interface{}) error 
 		log.Print("fail to check the trades during disconnection")
 	}
 
-	Mc.trackingOrders(snapshotWsOrders)
 	return nil
 }
 
@@ -210,10 +209,10 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 	var wsOrders []WsOrder
 	json.Unmarshal(jsonbody, &wsOrders)
 
-	Mc.OrdersBranch.mux.Lock()
-	defer Mc.OrdersBranch.mux.Unlock()
-	Mc.FilledOrdersBranch.mux.Lock()
-	defer Mc.FilledOrdersBranch.mux.Unlock()
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
+	Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock()
 
 	for i := 0; i < len(wsOrders); i++ {
 		if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
@@ -237,6 +236,7 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 			}
 		}
 	}
+
 	return nil
 }
 
@@ -251,10 +251,8 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 }
 
 func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
-	Mc.OrdersBranch.mux.Lock()
-	defer Mc.OrdersBranch.mux.Unlock()
-	Mc.WsClient.TmpBranch.mux.Lock()
-	defer Mc.WsClient.TmpBranch.mux.Unlock()
+	Mc.WsClient.TmpBranch.Lock()
+	defer Mc.WsClient.TmpBranch.Unlock()
 
 	// if there is not orders in the tmp memory, it is not possible to track the trades during WS is disconnected.
 	if len(Mc.WsClient.TmpBranch.Orders) == 0 {
@@ -275,8 +273,8 @@ func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
 
 	Mc.UpdateOrders(trackedWsOrders)
 
-	Mc.FilledOrdersBranch.mux.Lock()
-	defer Mc.FilledOrdersBranch.mux.Unlock()
+	Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock()
 	for id, odr := range untrackedWsOrders {
 		if _, ok := Mc.FilledOrdersBranch.Filled[id]; !ok {
 			Mc.FilledOrdersBranch.Filled[id] = odr
@@ -310,8 +308,8 @@ type Trade struct {
 // Account
 //	account_snapshot and //	account_update
 func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
-	Mc.BalanceBranch.mux.Lock()
-	defer Mc.BalanceBranch.mux.Unlock()
+	Mc.BalanceBranch.Lock()
+	defer Mc.BalanceBranch.Unlock()
 	switch reflect.TypeOf(msgMap["B"]).Kind() {
 	case reflect.Slice:
 		s := reflect.ValueOf(msgMap["B"])
@@ -369,4 +367,10 @@ type WsOrder struct {
 	RemainingVolume string `json:"rv,omitempty"`
 	ExecutedVolume  string `json:"ev,omitempty"`
 	TradesCount     int32  `json:"tc,omitempty"`
+}
+
+func (Mc *MaxClient) WsOnErrTurn(b bool) {
+	Mc.WsClient.onErrMutex.Lock()
+	defer Mc.WsClient.onErrMutex.Unlock()
+	Mc.WsClient.OnErr = b
 }
