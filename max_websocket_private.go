@@ -11,7 +11,6 @@ import (
 	"log"
 	"reflect"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/gorilla/websocket"
@@ -41,8 +40,8 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 	Mc.WsOnErrTurn(false)
 
 	// mainloop
-	NoErr := true
-	for NoErr {
+	mainloop:
+	for {
 		select {
 		case <-ctx.Done():
 			Mc.WsOnErrTurn(false)
@@ -51,12 +50,15 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 		default:
 			if Mc.WsClient.Conn == nil {
 				Mc.WsOnErrTurn(true)
+				break mainloop
 			}
 
-			_, msg, err := conn.ReadMessage()
+			msgtype, msg, err := conn.ReadMessage()
 			if err != nil {
-				LogErrorToDailyLogFile("read:", err)
+				LogErrorToDailyLogFile("read:", err, string(msg), msgtype)
 				Mc.WsOnErrTurn(true)
+				time.Sleep(time.Millisecond * 5000)
+				break mainloop
 			}
 
 			var msgMap map[string]interface{}
@@ -64,17 +66,20 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 			if err != nil {
 				LogWarningToDailyLogFile(err)
 				Mc.WsOnErrTurn(true)
+				break mainloop
 			}
 
 			errh := Mc.handleMaxSocketMsg(msg)
 			if errh != nil {
 				Mc.WsOnErrTurn(true)
+				break mainloop
 			}
 		} // end select
 
 		// if there is something wrong that the WS should be reconnected.
+		
 		if Mc.WsClient.OnErr {
-			NoErr = false
+			break
 		}
 	} // end for
 
@@ -90,6 +95,7 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 
 	message := "max websocket reconnecting"
 	LogInfoToDailyLogFile(message)
+	fmt.Println(message)
 	Mc.PriviateWebsocket(ctx)
 }
 
@@ -160,14 +166,12 @@ func (Mc *MaxClient) handleMaxSocketMsg(msg []byte) error {
 	case "authenticated":
 		LogInfoToDailyLogFile("websocket subscribtion authenticated")
 	case "order_snapshot":
-		fmt.Println("snapshot")
 		err2 = Mc.parseOrderSnapshotMsg(msgMap)
 	case "trade_snapshot":
 		err2 = Mc.parseTradeSnapshotMsg(msgMap)
 	case "account_snapshot":
 		err2 = Mc.parseAccountMsg(msgMap)
 	case "order_update":
-		fmt.Println("update")
 		err2 = Mc.parseOrderUpdateMsg(msgMap)
 	case "trade_update":
 		err2 = Mc.parseTradeUpdateMsg(msgMap)
@@ -339,7 +343,7 @@ func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
 	return nil
 }
 
-func sellbuyTransfer(side string) (string, error) {
+/* func sellbuyTransfer(side string) (string, error) {
 	switch strings.ToLower(side) {
 	case "sell":
 		return "sell", nil
@@ -352,6 +356,7 @@ func sellbuyTransfer(side string) (string, error) {
 	}
 	return "", errors.New("unrecognized side appear")
 }
+*/
 
 type WsOrder struct {
 	Id              int32  `json:"i,omitempty"`

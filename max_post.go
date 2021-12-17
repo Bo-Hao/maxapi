@@ -195,17 +195,13 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 	if side != nil {
 		params["side"] = side.(string)
 	}
-
+	// bug exist
 	canceledOrders, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrdersClear(context.Background(), Mc.apiKey, Mc.apiSecret, params)
 	if err != nil {
 		fmt.Println(err)
-		return []WsOrder{}, errors.New("fail to cancel orders")
+		return []WsOrder{}, err
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
-
-	if len(canceledOrders) > 0 {
-		LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders.")
-	}
 
 	// local balance update
 	cancelOrdersKey := []int32{}

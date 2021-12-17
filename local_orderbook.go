@@ -183,7 +183,6 @@ func (o *OrderbookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{})
 	jsonbody, _ := json.Marshal(msgMap)
 	var book bookstruct
 	json.Unmarshal(jsonbody, &book)
-	fmt.Println("update!!!")
 
 	// extract data
 	if book.Channcel != "book" {
