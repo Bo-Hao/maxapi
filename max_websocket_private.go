@@ -7,7 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -298,7 +297,7 @@ func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
 
 	if len(oldTrades) == 0 {
 		Mc.UpdateTrades(snapshottrades)
-		return nil 
+		return nil
 	}
 
 	untrades := Mc.ReadUnhedgeTrades()
@@ -317,7 +316,7 @@ func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
 			tracked = append(tracked, snapshottrades[i])
 		}
 	}
-	
+
 	Mc.TradesArrived(untracked)
 	Mc.UpdateTrades(tracked)
 	return nil
