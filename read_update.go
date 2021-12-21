@@ -20,11 +20,10 @@ func (Mc *MaxClient) ReadExchangeInfo() ExchangeInfo {
 }
 
 func (Mc *MaxClient) ReadOrders() map[int32]WsOrder {
-	Mc.OrdersBranch.RLock()
-	orders := Mc.OrdersBranch.Orders
-	Mc.OrdersBranch.RUnlock()
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
 
-	return orders
+	return Mc.OrdersBranch.Orders
 }
 
 func (Mc *MaxClient) ReadFilledOrders() map[int32]WsOrder {
@@ -51,6 +50,29 @@ func (Mc *MaxClient) ReadMarkets() []Market {
 	return Mc.MarketsBranch.Markets
 }
 
+func (Mc *MaxClient) ReadTrades() []Trade{ 
+	Mc.TradeBranch.RLock()
+	defer Mc.TradeBranch.RUnlock()
+	return Mc.TradeBranch.Trades
+}
+
+func (Mc *MaxClient) TakeUnhedgeTrades() []Trade {
+	Mc.TradeBranch.Lock()
+	defer Mc.TradeBranch.Unlock()
+	unhedgeTrades := Mc.TradeBranch.UnhedgeTrades
+	Mc.TradeBranch.Trades = append(Mc.TradeBranch.Trades, unhedgeTrades...)
+	Mc.TradeBranch.Trades = Mc.TradeBranch.Trades[len(Mc.TradeBranch.Trades)-100:]
+	Mc.TradeBranch.UnhedgeTrades = []Trade{}
+	return unhedgeTrades
+}
+
+func (Mc *MaxClient) ReadUnhedgeTrades() []Trade {
+	Mc.TradeBranch.RLock()
+	defer Mc.TradeBranch.RUnlock()
+	return Mc.TradeBranch.UnhedgeTrades
+}
+
+
 // update part
 
 func (Mc *MaxClient) UpdateBaseOrderUnit(Unit string) {
@@ -69,6 +91,25 @@ func (Mc *MaxClient) UpdateOrders(wsOrders map[int32]WsOrder) {
 	Mc.OrdersBranch.Lock()
 	defer Mc.OrdersBranch.Unlock()
 	Mc.OrdersBranch.Orders = wsOrders
+}
+
+
+func (Mc *MaxClient) UpdateTrades(trades []Trade) {
+	Mc.TradeBranch.Lock()
+	defer Mc.TradeBranch.Unlock()
+	Mc.TradeBranch.Trades = trades
+}
+
+func (Mc *MaxClient) UpdateUnhedgeTrades(unhedgetrades []Trade) {
+	Mc.TradeBranch.Lock()
+	defer Mc.TradeBranch.Unlock()
+	Mc.TradeBranch.UnhedgeTrades = unhedgetrades
+}
+
+func (Mc *MaxClient) TradesArrived(trades []Trade){
+	Mc.TradeBranch.Lock()
+	defer Mc.TradeBranch.Unlock()
+	Mc.TradeBranch.UnhedgeTrades = append(Mc.TradeBranch.UnhedgeTrades, trades...)
 }
 
 func (Mc *MaxClient) UpdateFilledOrders(wsOrders map[int32]WsOrder) {

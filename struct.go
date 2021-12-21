@@ -65,6 +65,13 @@ type MaxClient struct {
 		sync.RWMutex
 	}
 
+
+	TradeBranch struct{
+		UnhedgeTrades []Trade
+		Trades []Trade
+		sync.RWMutex
+	}
+
 	// All markets pairs
 	MarketsBranch struct {
 		Markets []Market
@@ -106,6 +113,9 @@ type HedgingOrder struct {
 	Volume    float64
 	Timestamp int32
 	AbsVolume float64
+	MaxFee float64 
+	MaxFeeCurrency string
+	MaxMaker bool
 
 	// hedged info
 	TotalProfit        float64
@@ -115,4 +125,32 @@ type HedgingOrder struct {
 	MarketSide         string
 	Fee                float64
 	FeeCurrency        string
+}
+
+type WsOrder struct {
+	Id              int32  `json:"i,omitempty"`
+	Side            string `json:"sd,omitempty"`
+	OrdType         string `json:"ot,omitempty"`
+	Price           string `json:"p,omitempty"`
+	StopPrice       string `json:"sp,omitempty"`
+	AvgPrice        string `json:"ap,omitempty"`
+	State           string `json:"S,omitempty"`
+	Market          string `json:"M,omitempty"`
+	CreatedAt       int32  `json:"T,omitempty"`
+	Volume          string `json:"v,omitempty"`
+	RemainingVolume string `json:"rv,omitempty"`
+	ExecutedVolume  string `json:"ev,omitempty"`
+	TradesCount     int32  `json:"tc,omitempty"`
+}
+
+type Trade struct {
+	Id          int32  `json:"i,omitempty"`
+	Price       string `json:"p,omitempty"`
+	Volume      string `json:"v,omitempty"`
+	Market      string `json:"M,omitempty"`
+	Timestamp   int32  `json:"T,omitempty"`
+	Side        string `json:"sd,omitempty"`
+	Fee         string `json:"f,omitempty"`
+	FeeCurrency string `json:"fc,omitempty"`
+	Maker       bool   `json:"m,omitempty"`
 }

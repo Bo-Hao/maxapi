@@ -8,11 +8,26 @@ import (
 	"strconv"
 	"syscall"
 	"time"
+
+	"github.com/gorilla/websocket"
 )
 
 func (Mc *MaxClient) Run(ctx context.Context) {
 	go func() {
 		Mc.PriviateWebsocket(ctx)
+	}()
+
+	go func() {
+		for {
+			time.Sleep(30 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				message := []byte("ping")
+				Mc.WsClient.Conn.WriteMessage(websocket.TextMessage, message)
+			}
+		}
 	}()
 
 	go func() {
@@ -89,7 +104,6 @@ func NewMaxClient(ctx context.Context, APIKEY, APISECRET string) *MaxClient {
 	m.apiSecret = APISECRET
 	_, cancel := context.WithCancel(ctx)
 	m.cancelFunc = &cancel
-	//m.cancelFunc = cancel
 	m.ShutingBranch.shut = false
 	m.ApiClient = apiclient
 	m.OrdersBranch.Orders = make(map[int32]WsOrder)
@@ -97,7 +111,6 @@ func NewMaxClient(ctx context.Context, APIKEY, APISECRET string) *MaxClient {
 	m.FilledOrdersBranch.Filled = make(map[int32]WsOrder)
 	m.MarketsBranch.Markets = markets
 	m.BalanceBranch.Balance = make(map[string]Balance)
-
 	return &m
 }
 
@@ -156,8 +169,6 @@ func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 			s = -1.
 		}
 
-		
-
 		if hedgingOrder, ok := hedgingOrders[market]; ok {
 			hedgingOrder.Profit += price * volume * s
 			hedgingOrder.Volume += volume * s
@@ -180,7 +191,7 @@ func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 		}
 
 		// dealing with partial filled orders
-		if order.State == "done" {
+		if order.State == "done" || order.State == "cancel" {
 			delete(Mc.FilledOrdersBranch.Partial, order.Id)
 		} else {
 			Mc.FilledOrdersBranch.Partial[order.Id] = order
@@ -189,5 +200,67 @@ func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 	}
 
 	Mc.FilledOrdersBranch.Filled = map[int32]WsOrder{}
+	return hedgingOrders, true
+}
+
+func (Mc *MaxClient) DetectUnhedgeTrades() (map[string]HedgingOrder, bool) {
+	// check if there is unhedged trade.
+	Mc.TradeBranch.RLock()
+	tradeLen := len(Mc.TradeBranch.UnhedgeTrades)
+	Mc.TradeBranch.RUnlock()
+	if tradeLen == 0 {
+		return map[string]HedgingOrder{}, false
+	}
+
+	hedgingOrders := map[string]HedgingOrder{}
+	unhedgeTrades := Mc.TakeUnhedgeTrades()
+
+
+	for i := 0; i < len(unhedgeTrades); i++ {
+		trade := unhedgeTrades[i]
+		market := trade.Market
+		price, err := strconv.ParseFloat(trade.Price, 64)
+		if err != nil {
+			LogFatalToDailyLogFile(err, trade.Price, "is the element can't be convert")
+		}
+		volume, err := strconv.ParseFloat(trade.Volume, 64)
+		if err != nil {
+			LogFatalToDailyLogFile(err, trade.Volume, "is the element can't be convert")
+		}
+
+		maxFee, err := strconv.ParseFloat(trade.Fee, 64)
+		if err != nil {
+			LogFatalToDailyLogFile(err, trade.Fee, "is the element can't be convert")
+		}
+
+		s := 1.
+		if trade.Side == "buy" || trade.Side == "bid" {
+			s = -1.
+		}
+
+		if hedgingOrder, ok := hedgingOrders[market]; ok {
+			hedgingOrder.Profit += price * volume * s
+			hedgingOrder.Volume += volume * s
+			hedgingOrder.AbsVolume += volume
+			hedgingOrder.MaxFee += maxFee
+		} else {
+			base, quote, err := Mc.checkBaseQuote(market)
+			if err != nil {
+				LogFatalToDailyLogFile(err)
+			}
+			ho := HedgingOrder{
+				Market:    market,
+				Base:      base,
+				Quote:     quote,
+				Profit:    price * volume * s,
+				Volume:    volume * s,
+				Timestamp: int32(time.Now().UnixMilli()),
+				MaxFee: maxFee,
+				MaxFeeCurrency: trade.FeeCurrency,
+				MaxMaker: 	trade.Maker,
+			}
+			hedgingOrders[market] = ho
+		}
+	}
 	return hedgingOrders, true
 }

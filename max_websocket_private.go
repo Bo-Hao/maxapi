@@ -7,8 +7,6 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"log"
 	"reflect"
 	"strconv"
 	"time"
@@ -36,11 +34,10 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 	Mc.WsClient.Conn = conn
 	Mc.WsClient.connMutex.Unlock()
 
-	LogInfoToDailyLogFile("Connected:", url)
 	Mc.WsOnErrTurn(false)
 
 	// mainloop
-	mainloop:
+mainloop:
 	for {
 		select {
 		case <-ctx.Done():
@@ -77,12 +74,12 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 		} // end select
 
 		// if there is something wrong that the WS should be reconnected.
-		
 		if Mc.WsClient.OnErr {
 			break
 		}
 	} // end for
 
+	conn.Close()
 	Mc.WsClient.Conn.Close()
 
 	// if it is manual work.
@@ -91,11 +88,11 @@ func (Mc *MaxClient) PriviateWebsocket(ctx context.Context) {
 	}
 	Mc.WsClient.TmpBranch.Lock()
 	Mc.WsClient.TmpBranch.Orders = Mc.ReadOrders()
+	Mc.WsClient.TmpBranch.Trades = Mc.ReadTrades()
 	Mc.WsClient.TmpBranch.Unlock()
 
 	message := "max websocket reconnecting"
 	LogInfoToDailyLogFile(message)
-	fmt.Println(message)
 	Mc.PriviateWebsocket(ctx)
 }
 
@@ -134,7 +131,7 @@ func GetMaxSubscribePrivateMessage(apikey, apisecret string) ([]byte, error) {
 	param["apiKey"] = apikey
 	param["nonce"] = nonce
 	param["signature"] = signature
-	//param["filters"] = []string{filter}
+	//param["filters"] = []string{"order", "account"} //"filters": ["order", "trade"] // ignore account update
 	param["id"] = "User"
 
 	req, err := json.Marshal(param)
@@ -198,11 +195,13 @@ func (Mc *MaxClient) parseOrderSnapshotMsg(msgMap map[string]interface{}) error 
 		snapshotWsOrders[wsOrders[i].Id] = wsOrders[i]
 	}
 
-	// checking trades situation.
+	Mc.UpdateOrders(snapshotWsOrders)
+
+	/* // checking trades situation.
 	err := Mc.trackingOrders(snapshotWsOrders)
 	if err != nil {
 		log.Print("fail to check the trades during disconnection")
-	}
+	} */
 
 	return nil
 }
@@ -215,8 +214,8 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 
 	Mc.OrdersBranch.Lock()
 	defer Mc.OrdersBranch.Unlock()
-	Mc.FilledOrdersBranch.Lock()
-	defer Mc.FilledOrdersBranch.Unlock()
+	/* Mc.FilledOrdersBranch.Lock()
+	defer Mc.FilledOrdersBranch.Unlock() */
 
 	for i := 0; i < len(wsOrders); i++ {
 		if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
@@ -225,14 +224,14 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 		} else {
 			switch wsOrders[i].State {
 			case "cancel":
-				//fmt.Println("order canceled: ", wsOrders[i])
+				/* if wsOrders[i].ExecutedVolume != "0" {
+					Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
+				} */
 				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
 			case "done":
-				//fmt.Println("order done: ", wsOrders[i])
-				Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
+				//Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
 				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
 			default:
-				//fmt.Println("order partial fill: ", wsOrders[i])
 				if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
 					Mc.OrdersBranch.Orders[wsOrders[i].Id] = wsOrders[i]
 				}
@@ -251,10 +250,12 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
 
+	Mc.trackingTrades(newTrades)
+
 	return nil
 }
 
-func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
+/* func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
 	Mc.WsClient.TmpBranch.Lock()
 	defer Mc.WsClient.TmpBranch.Unlock()
 
@@ -287,6 +288,38 @@ func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
 
 	return nil
 }
+ */
+ 
+func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
+	Mc.WsClient.TmpBranch.Lock()
+	oldTrades := Mc.WsClient.TmpBranch.Trades
+	Mc.WsClient.TmpBranch.Trades = []Trade{}
+	Mc.WsClient.TmpBranch.Unlock()
+
+	untrades := Mc.ReadUnhedgeTrades()
+
+	if len(oldTrades) == 0 {
+		Mc.UpdateTrades(snapshottrades)
+	}
+
+	tradeMap := map[int32]struct{}{}
+	oldTrades = append(oldTrades, untrades...)
+	for i := 0; i < len(oldTrades); i++ {
+		tradeMap[oldTrades[i].Id] = struct{}{}
+	}
+
+	untracked, tracked := make([]Trade, 0, 100), make([]Trade, 0, 100)
+	for i := 0; i < len(snapshottrades); i++ {
+		if _, ok := tradeMap[snapshottrades[i].Id]; !ok {
+			untracked = append(untracked, snapshottrades[i])
+		} else {
+			tracked = append(tracked, snapshottrades[i])
+		}
+	}
+	Mc.TradesArrived(untracked)
+	Mc.UpdateTrades(tracked)
+	return nil
+}
 
 //	trade_update
 func (Mc *MaxClient) parseTradeUpdateMsg(msgMap map[string]interface{}) error {
@@ -294,19 +327,8 @@ func (Mc *MaxClient) parseTradeUpdateMsg(msgMap map[string]interface{}) error {
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
 
+	Mc.TradesArrived(newTrades)
 	return nil
-}
-
-type Trade struct {
-	Id          int32  `json:"i,omitempty"`
-	Price       string `json:"p,omitempty"`
-	Volume      string `json:"v,omitempty"`
-	Market      string `json:"M,omitempty"`
-	Timestamp   int32  `json:"T,omitempty"`
-	Side        string `json:"sd,omitempty"`
-	Fee         string `json:"f,omitempty"`
-	FeeCurrency string `json:"fc,omitempty"`
-	Maker       bool   `json:"m,omitempty"`
 }
 
 // Account
@@ -357,22 +379,6 @@ func (Mc *MaxClient) parseAccountMsg(msgMap map[string]interface{}) error {
 	return "", errors.New("unrecognized side appear")
 }
 */
-
-type WsOrder struct {
-	Id              int32  `json:"i,omitempty"`
-	Side            string `json:"sd,omitempty"`
-	OrdType         string `json:"ot,omitempty"`
-	Price           string `json:"p,omitempty"`
-	StopPrice       string `json:"sp,omitempty"`
-	AvgPrice        string `json:"ap,omitempty"`
-	State           string `json:"S,omitempty"`
-	Market          string `json:"M,omitempty"`
-	CreatedAt       int32  `json:"T,omitempty"`
-	Volume          string `json:"v,omitempty"`
-	RemainingVolume string `json:"rv,omitempty"`
-	ExecutedVolume  string `json:"ev,omitempty"`
-	TradesCount     int32  `json:"tc,omitempty"`
-}
 
 func (Mc *MaxClient) WsOnErrTurn(b bool) {
 	Mc.WsClient.onErrMutex.Lock()
