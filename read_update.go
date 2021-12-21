@@ -61,7 +61,9 @@ func (Mc *MaxClient) TakeUnhedgeTrades() []Trade {
 	defer Mc.TradeBranch.Unlock()
 	unhedgeTrades := Mc.TradeBranch.UnhedgeTrades
 	Mc.TradeBranch.Trades = append(Mc.TradeBranch.Trades, unhedgeTrades...)
-	Mc.TradeBranch.Trades = Mc.TradeBranch.Trades[len(Mc.TradeBranch.Trades)-100:]
+	if len(Mc.TradeBranch.Trades) > 105{
+		Mc.TradeBranch.Trades = Mc.TradeBranch.Trades[len(Mc.TradeBranch.Trades)-105:]
+	}
 	Mc.TradeBranch.UnhedgeTrades = []Trade{}
 	return unhedgeTrades
 }

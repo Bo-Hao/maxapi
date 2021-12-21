@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -249,7 +250,6 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 	jsonbody, _ := json.Marshal(msgMap["t"])
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
-
 	Mc.trackingTrades(newTrades)
 
 	return nil
@@ -288,19 +288,20 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 
 	return nil
 }
- */
- 
+*/
+
 func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
 	Mc.WsClient.TmpBranch.Lock()
 	oldTrades := Mc.WsClient.TmpBranch.Trades
 	Mc.WsClient.TmpBranch.Trades = []Trade{}
 	Mc.WsClient.TmpBranch.Unlock()
 
-	untrades := Mc.ReadUnhedgeTrades()
-
 	if len(oldTrades) == 0 {
 		Mc.UpdateTrades(snapshottrades)
+		return nil 
 	}
+
+	untrades := Mc.ReadUnhedgeTrades()
 
 	tradeMap := map[int32]struct{}{}
 	oldTrades = append(oldTrades, untrades...)
@@ -308,7 +309,7 @@ func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
 		tradeMap[oldTrades[i].Id] = struct{}{}
 	}
 
-	untracked, tracked := make([]Trade, 0, 100), make([]Trade, 0, 100)
+	untracked, tracked := make([]Trade, 0, 130), make([]Trade, 0, 130)
 	for i := 0; i < len(snapshottrades); i++ {
 		if _, ok := tradeMap[snapshottrades[i].Id]; !ok {
 			untracked = append(untracked, snapshottrades[i])
@@ -316,6 +317,7 @@ func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
 			tracked = append(tracked, snapshottrades[i])
 		}
 	}
+	
 	Mc.TradesArrived(untracked)
 	Mc.UpdateTrades(tracked)
 	return nil
@@ -326,7 +328,6 @@ func (Mc *MaxClient) parseTradeUpdateMsg(msgMap map[string]interface{}) error {
 	jsonbody, _ := json.Marshal(msgMap["t"])
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
-
 	Mc.TradesArrived(newTrades)
 	return nil
 }
