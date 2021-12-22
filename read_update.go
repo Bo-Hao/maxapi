@@ -2,6 +2,7 @@ package maxapi
 
 import (
 	"errors"
+	"strings"
 )
 
 func (Mc *MaxClient) ReadBaseOrderUnit() string {
@@ -110,8 +111,8 @@ func (Mc *MaxClient) UpdateUnhedgeTrades(unhedgetrades []Trade) {
 
 func (Mc *MaxClient) TradesArrived(trades []Trade){
 	Mc.TradeBranch.Lock()
-	defer Mc.TradeBranch.Unlock()
 	Mc.TradeBranch.UnhedgeTrades = append(Mc.TradeBranch.UnhedgeTrades, trades...)
+	Mc.TradeBranch.Unlock()
 }
 
 func (Mc *MaxClient) UpdateFilledOrders(wsOrders map[int32]WsOrder) {
@@ -126,11 +127,22 @@ func (Mc *MaxClient) UpdatePartialFilledOrders(wsOrders map[int32]WsOrder) {
 	Mc.FilledOrdersBranch.Partial = wsOrders
 }
 
-func (Mc *MaxClient) UpdateBalance(balances map[string]Balance) {
+func (Mc *MaxClient) UpdateBalances(balances map[string]Balance) {
 	Mc.BalanceBranch.Lock()
 	defer Mc.BalanceBranch.Unlock()
 	Mc.BalanceBranch.Balance = balances
 }
+
+func (Mc *MaxClient) UpdateBalance(asset string, change float64) {
+	Mc.BalanceBranch.Lock()
+	defer Mc.BalanceBranch.Unlock()
+	b := Mc.BalanceBranch.Balance[strings.ToLower(asset)]
+	b.Locked += change 
+	Mc.BalanceBranch.Balance[strings.ToLower(asset)] = b
+}
+
+
+
 
 // ########### assistant functions ###########
 

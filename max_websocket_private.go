@@ -7,6 +7,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -91,8 +92,8 @@ mainloop:
 	Mc.WsClient.TmpBranch.Trades = Mc.ReadTrades()
 	Mc.WsClient.TmpBranch.Unlock()
 
-	message := "max websocket reconnecting"
-	LogInfoToDailyLogFile(message)
+	//message := "max websocket reconnecting"
+	//LogInfoToDailyLogFile(message)
 	Mc.PriviateWebsocket(ctx)
 }
 
@@ -161,7 +162,7 @@ func (Mc *MaxClient) handleMaxSocketMsg(msg []byte) error {
 	var err2 error
 	switch event {
 	case "authenticated":
-		LogInfoToDailyLogFile("websocket subscribtion authenticated")
+		//LogInfoToDailyLogFile("websocket subscribtion authenticated")
 	case "order_snapshot":
 		err2 = Mc.parseOrderSnapshotMsg(msgMap)
 	case "trade_snapshot":
@@ -317,8 +318,12 @@ func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
 		}
 	}
 
-	Mc.TradesArrived(untracked)
 	Mc.UpdateTrades(tracked)
+	if len(untracked) > 0 {
+		fmt.Println("trade snapshot:", untracked)
+		Mc.TradesArrived(untracked)
+	}
+
 	return nil
 }
 
@@ -328,6 +333,7 @@ func (Mc *MaxClient) parseTradeUpdateMsg(msgMap map[string]interface{}) error {
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
 	Mc.TradesArrived(newTrades)
+	fmt.Println("trade update: ", newTrades)
 	return nil
 }
 

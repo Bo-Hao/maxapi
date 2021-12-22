@@ -246,7 +246,7 @@ func (Mc *MaxClient) PlaceLimitOrder(market string, side string, price, volume f
 
 	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, side, vol, params)
 	if err != nil {
-		return WsOrder{}, errors.New("fail to place limit order")
+		return WsOrder{}, err
 	}
 
 	// data update
@@ -350,3 +350,23 @@ func (Mc *MaxClient) PlaceMarketOrder(market string, side string, volume float64
 
 	return WsOrder(order), nil
 }
+
+/*
+func (Mc MaxClient) PlaceMakerOrder(market string, side string, volume float64) error {
+	orderbook := SpotLocalOrderbook(strings.ToLower(market), logrus.New())
+	time.Sleep(2 * time.Second)
+
+	for {}
+	asks, ok := orderbook.GetAsks()
+	if ok {
+		fmt.Println("ask")
+		fmt.Println(asks)
+	}
+
+	bids, ok := orderbook.GetBids()
+	if ok {
+		fmt.Println("bid")
+		fmt.Println(bids)
+	}
+}
+*/
