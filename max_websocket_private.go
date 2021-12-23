@@ -391,3 +391,169 @@ func (Mc *MaxClient) WsOnErrTurn(b bool) {
 	defer Mc.WsClient.onErrMutex.Unlock()
 	Mc.WsClient.OnErr = b
 }
+
+// with channel
+func (Mc *MaxClient) PriviateWebsocketWithChannel(ctx context.Context, tradeChan chan []Trade) {
+	var url string = "wss://max-stream.maicoin.com/ws"
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		LogFatalToDailyLogFile(err)
+	}
+
+	subMsg, err := GetMaxSubscribePrivateMessage(Mc.apiKey, Mc.apiSecret)
+	if err != nil {
+		LogFatalToDailyLogFile(errors.New("fail to construct subscribtion message"))
+	}
+
+	err = conn.WriteMessage(websocket.TextMessage, subMsg)
+	if err != nil {
+		LogFatalToDailyLogFile(errors.New("fail to subscribe websocket"))
+	}
+	Mc.WsClient.connMutex.Lock()
+	Mc.WsClient.Conn = conn
+	Mc.WsClient.connMutex.Unlock()
+
+	Mc.WsOnErrTurn(false)
+
+	// mainloop
+mainloop:
+	for {
+		select {
+		case <-ctx.Done():
+			Mc.WsOnErrTurn(false)
+			Mc.ShutDown()
+			return
+		default:
+			if Mc.WsClient.Conn == nil {
+				Mc.WsOnErrTurn(true)
+				break mainloop
+			}
+
+			msgtype, msg, err := conn.ReadMessage()
+			if err != nil {
+				LogErrorToDailyLogFile("read:", err, string(msg), msgtype)
+				Mc.WsOnErrTurn(true)
+				time.Sleep(time.Millisecond * 5000)
+				break mainloop
+			}
+
+			var msgMap map[string]interface{}
+			err = json.Unmarshal(msg, &msgMap)
+			if err != nil {
+				LogWarningToDailyLogFile(err)
+				Mc.WsOnErrTurn(true)
+				break mainloop
+			}
+
+			errh := Mc.handleMaxSocketMsgWithChannel(msg, tradeChan)
+			if errh != nil {
+				Mc.WsOnErrTurn(true)
+				break mainloop
+			}
+		} // end select
+
+		// if there is something wrong that the WS should be reconnected.
+		if Mc.WsClient.OnErr {
+			break
+		}
+	} // end for
+
+	conn.Close()
+	Mc.WsClient.Conn.Close()
+
+	// if it is manual work.
+	if !Mc.WsClient.OnErr {
+		return
+	}
+	Mc.WsClient.TmpBranch.Lock()
+	Mc.WsClient.TmpBranch.Orders = Mc.ReadOrders()
+	Mc.WsClient.TmpBranch.Trades = Mc.ReadTrades()
+	Mc.WsClient.TmpBranch.Unlock()
+
+	Mc.PriviateWebsocket(ctx)
+}
+
+func (Mc *MaxClient) handleMaxSocketMsgWithChannel(msg []byte, tradeChan chan []Trade) error {
+	var msgMap map[string]interface{}
+	err := json.Unmarshal(msg, &msgMap)
+	if err != nil {
+		LogErrorToDailyLogFile(err)
+		return errors.New("fail to unmarshal message")
+	}
+
+	event, ok := msgMap["e"]
+	if !ok {
+		LogWarningToDailyLogFile("there is no event in message")
+		return errors.New("fail to obtain message")
+	}
+
+	// distribute the msg
+	var err2 error
+	switch event {
+	case "authenticated":
+		//LogInfoToDailyLogFile("websocket subscribtion authenticated")
+	case "order_snapshot":
+		err2 = Mc.parseOrderSnapshotMsg(msgMap)
+	case "trade_snapshot":
+		err2 = Mc.parseTradeSnapshotMsgWithChannel(msgMap, tradeChan)
+	case "account_snapshot":
+		err2 = Mc.parseAccountMsg(msgMap)
+	case "order_update":
+		err2 = Mc.parseOrderUpdateMsg(msgMap)
+	case "trade_update":
+		err2 = Mc.parseTradeUpdateMsgWithChannel(msgMap, tradeChan)
+	case "account_update":
+		err2 = Mc.parseAccountMsg(msgMap)
+	}
+	if err2 != nil {
+		return errors.New("fail to parse message")
+	}
+	return nil
+}
+
+func (Mc *MaxClient) parseTradeSnapshotMsgWithChannel(msgMap map[string]interface{}, tradeChan chan []Trade) error {
+	jsonbody, _ := json.Marshal(msgMap["t"])
+	var snapshottrades []Trade
+	json.Unmarshal(jsonbody, &snapshottrades)
+
+	Mc.WsClient.TmpBranch.Lock()
+	oldTrades := Mc.WsClient.TmpBranch.Trades
+	Mc.WsClient.TmpBranch.Trades = []Trade{}
+	Mc.WsClient.TmpBranch.Unlock()
+
+	if len(oldTrades) == 0 {
+		Mc.UpdateTrades(snapshottrades)
+		return nil
+	}
+
+	tradeMap := map[int32]struct{}{}
+	for i := 0; i < len(oldTrades); i++ {
+		tradeMap[oldTrades[i].Id] = struct{}{}
+	}
+
+	untracked := make([]Trade, 0, 130)
+	for i := 0; i < len(snapshottrades); i++ {
+		if _, ok := tradeMap[snapshottrades[i].Id]; !ok {
+			untracked = append(untracked, snapshottrades[i])
+		}
+	}
+
+	if len(untracked) > 0 {
+		tradeChan <- untracked
+		fmt.Println("trade snapshot:", untracked)
+	}
+	Mc.UpdateTrades(snapshottrades)
+
+	return nil
+}
+
+//	trade_update
+func (Mc *MaxClient) parseTradeUpdateMsgWithChannel(msgMap map[string]interface{}, tradeChan chan []Trade) error {
+	jsonbody, _ := json.Marshal(msgMap["t"])
+	var newTrades []Trade
+	json.Unmarshal(jsonbody, &newTrades)
+	tradeChan <- newTrades
+	Mc.AddTrades(newTrades)
+	fmt.Println("trade update: ", newTrades)
+	return nil
+}

@@ -96,6 +96,12 @@ func (Mc *MaxClient) UpdateOrders(wsOrders map[int32]WsOrder) {
 	Mc.OrdersBranch.Orders = wsOrders
 }
 
+func (Mc *MaxClient) AddTrades(trades []Trade) {
+	Mc.TradeBranch.Lock()
+	defer Mc.TradeBranch.Unlock()
+	Mc.TradeBranch.Trades = append(Mc.TradeBranch.Trades, trades...)
+}
+
 
 func (Mc *MaxClient) UpdateTrades(trades []Trade) {
 	Mc.TradeBranch.Lock()

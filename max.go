@@ -89,6 +89,83 @@ func (Mc *MaxClient) Run(ctx context.Context) {
 	}()
 }
 
+func (Mc *MaxClient) RunWithTradeChannel(ctx context.Context, tradeChan chan []Trade){
+	go func() {
+		Mc.PriviateWebsocketWithChannel(ctx, tradeChan)
+	}()
+
+	go func() {
+		for {
+			time.Sleep(50 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				message := []byte("ping")
+				Mc.WsClient.Conn.WriteMessage(websocket.TextMessage, message)
+			}
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				Mc.ShutDown()
+				return
+			default:
+				Mc.ShutingBranch.RLock()
+				if Mc.ShutingBranch.shut {
+					Mc.ShutDown()
+				}
+				Mc.ShutingBranch.RUnlock()
+
+				_, err := Mc.GetBalance()
+				if err != nil {
+					LogWarningToDailyLogFile(err, ". in routine checking")
+				}
+
+				_, err = Mc.GetAllOrders()
+				if err != nil {
+					LogWarningToDailyLogFile(err, ". in routine checking")
+				}
+				time.Sleep( time.Minute)
+			}
+
+		}
+	}()
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				Mc.ShutDown()
+				return
+			default:
+				Mc.ShutingBranch.RLock()
+				if Mc.ShutingBranch.shut {
+					Mc.ShutDown()
+				}
+				Mc.ShutingBranch.RUnlock()
+
+				_, err := Mc.GetMarkets()
+				if err != nil {
+					LogWarningToDailyLogFile(err, ". in routine checking")
+				}
+				time.Sleep(12 * time.Hour)
+			}
+		}
+	}()
+
+	c := make(chan os.Signal)
+	signal.Notify(c, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-c
+		fmt.Println("Ctrl + C Pressed: shutting max websocket")
+		Mc.ShutDown()
+	}()
+}
+
 func NewMaxClient(ctx context.Context, APIKEY, APISECRET string) *MaxClient {
 	// api client
 	cfg := NewConfiguration()
