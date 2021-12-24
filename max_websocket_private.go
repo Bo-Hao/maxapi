@@ -55,7 +55,7 @@ mainloop:
 			if err != nil {
 				LogErrorToDailyLogFile("read:", err, string(msg), msgtype)
 				Mc.WsOnErrTurn(true)
-				time.Sleep(time.Millisecond * 5000)
+				time.Sleep(time.Millisecond * 500)
 				break mainloop
 			}
 
@@ -433,7 +433,7 @@ mainloop:
 			if err != nil {
 				LogErrorToDailyLogFile("read:", err, string(msg), msgtype)
 				Mc.WsOnErrTurn(true)
-				time.Sleep(time.Millisecond * 5000)
+				time.Sleep(time.Millisecond * 500)
 				break mainloop
 			}
 
@@ -540,7 +540,6 @@ func (Mc *MaxClient) parseTradeSnapshotMsgWithChannel(msgMap map[string]interfac
 
 	if len(untracked) > 0 {
 		tradeChan <- untracked
-		fmt.Println("trade snapshot:", untracked)
 	}
 	Mc.UpdateTrades(snapshottrades)
 
@@ -552,8 +551,9 @@ func (Mc *MaxClient) parseTradeUpdateMsgWithChannel(msgMap map[string]interface{
 	jsonbody, _ := json.Marshal(msgMap["t"])
 	var newTrades []Trade
 	json.Unmarshal(jsonbody, &newTrades)
-	tradeChan <- newTrades
-	Mc.AddTrades(newTrades)
-	fmt.Println("trade update: ", newTrades)
+	if len(newTrades) != 0 {
+		tradeChan <- newTrades
+		Mc.AddTrades(newTrades)
+	}
 	return nil
 }

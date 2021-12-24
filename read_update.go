@@ -147,11 +147,18 @@ func (Mc *MaxClient) UpdateBalance(asset string, change float64) {
 	Mc.BalanceBranch.Balance[strings.ToLower(asset)] = b
 }
 
+func (Mc *MaxClient) LockBalance(asset string, lock float64) {
+	Mc.BalanceBranch.Lock()
+	defer Mc.BalanceBranch.Unlock()
+	b := Mc.BalanceBranch.Balance[strings.ToLower(asset)]
+	b.Locked += lock
+	b.Avaliable -= lock
+	Mc.BalanceBranch.Balance[strings.ToLower(asset)] = b
+}
 
 
 
 // ########### assistant functions ###########
-
 func (Mc *MaxClient) checkBaseQuote(market string) (base, quote string, err error) {
 	markets := Mc.ReadMarkets()
 	for _, m := range markets {
