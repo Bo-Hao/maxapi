@@ -25,7 +25,7 @@ func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 
 	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(context.Background(), Mc.apiKey, Mc.apiSecret)
 	if err != nil {
-		return map[string]Balance{}, errors.New("fail to get balance")
+		return map[string]Balance{}, err
 	}
 	Accounts := member.Accounts
 	for i := 0; i < len(Accounts); i++ {
@@ -60,14 +60,27 @@ func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, nil)
 	if err != nil {
-		return map[int32]WsOrder{}, errors.New("fail to get order list")
+		return map[int32]WsOrder{}, err
 	}
 
+	NBid, NAsk := 0, 0
 	wsOrders := map[int32]WsOrder{}
 	for i := 0; i < len(orders); i++ {
 		order := WsOrder(orders[i])
 		wsOrders[order.Id] = order
+
+		if strings.EqualFold(orders[i].Side, "BUY") {
+			NBid += 1
+		} else {
+			NAsk += 1
+		}
 	}
+	Mc.OrderNumbersBranch.Lock()
+	Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+		NBid: NBid,
+		NAsk: NAsk,
+	}
+	Mc.OrderNumbersBranch.Unlock()
 
 	Mc.OrdersBranch.Lock()
 	defer Mc.OrdersBranch.Unlock()
@@ -93,12 +106,24 @@ func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 		marketId := markets[i].Id
 		orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, marketId, nil)
 		if err != nil {
-			return map[int32]WsOrder{}, errors.New("fail to get order list")
+			return map[int32]WsOrder{}, err
 		}
 
+		NBid, NAsk := 0, 0
 		for j := 0; j < len(orders); j++ {
 			newOrders[orders[j].Id] = WsOrder(orders[j])
+			if strings.EqualFold(orders[i].Side, "BUY") {
+				NBid += 1
+			} else {
+				NAsk += 1
+			}
 		}
+		Mc.OrderNumbersBranch.Lock()
+		Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(marketId)] = NumbersOfOrder{
+			NBid: NBid,
+			NAsk: NAsk,
+		}
+		Mc.OrderNumbersBranch.Unlock()
 	}
 
 	Mc.OrdersBranch.Lock()
@@ -112,7 +137,7 @@ func (Mc *MaxClient) GetMarkets() ([]Market, error) {
 	defer Mc.MarketsBranch.RUnlock()
 	markets, _, err := Mc.ApiClient.PublicApi.GetApiV2Markets(context.Background())
 	if err != nil {
-		return []Market{}, errors.New("fail to get market")
+		return []Market{}, err
 	}
 	Mc.MarketsBranch.Markets = markets
 	return markets, nil

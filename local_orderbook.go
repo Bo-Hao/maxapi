@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
@@ -55,6 +56,21 @@ func SpotLocalOrderbook(symbol string, logger *logrus.Logger) *OrderbookBranch {
 	return &o
 }
 
+func (o *OrderbookBranch) PingIt(ctx context.Context) {
+	go func() {
+		for {
+			time.Sleep(30 * time.Second)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				message := []byte("ping")
+				o.conn.WriteMessage(websocket.TextMessage, message)
+			}
+		}
+	}()
+}
+
 func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 	var url string = "wss://max-stream.maicoin.com/ws"
 
@@ -78,7 +94,7 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 		LogFatalToDailyLogFile(errors.New("fail to subscribe websocket"))
 	}
 
-	NoErr:= true
+	NoErr := true
 	for NoErr {
 		select {
 		case <-ctx.Done():
@@ -120,7 +136,6 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 	} // end for
 	o.conn.Close()
 
-	
 	if !o.onErrBranch.onErr {
 		return
 	}

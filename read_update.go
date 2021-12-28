@@ -20,10 +20,18 @@ func (Mc *MaxClient) ReadExchangeInfo() ExchangeInfo {
 	return E
 }
 
-func (Mc *MaxClient) ReadOrders() map[int32]WsOrder {
-	Mc.OrdersBranch.Lock()
-	defer Mc.OrdersBranch.Unlock()
+func (Mc *MaxClient) ReadNumberOfOrder(market string) (NAsk, NBid int) {
+	Mc.OrderNumbersBranch.RLock()
+	defer Mc.OrderNumbersBranch.RUnlock()
+	NOO := Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)]
+	NAsk = NOO.NAsk
+	NBid = NOO.NBid
+	return
+}
 
+func (Mc *MaxClient) ReadOrders() map[int32]WsOrder {
+	Mc.OrdersBranch.RLock()
+	defer Mc.OrdersBranch.RUnlock()
 	return Mc.OrdersBranch.Orders
 }
 
@@ -51,7 +59,7 @@ func (Mc *MaxClient) ReadMarkets() []Market {
 	return Mc.MarketsBranch.Markets
 }
 
-func (Mc *MaxClient) ReadTrades() []Trade{ 
+func (Mc *MaxClient) ReadTrades() []Trade {
 	Mc.TradeBranch.RLock()
 	defer Mc.TradeBranch.RUnlock()
 	return Mc.TradeBranch.Trades
@@ -62,7 +70,7 @@ func (Mc *MaxClient) TakeUnhedgeTrades() []Trade {
 	defer Mc.TradeBranch.Unlock()
 	unhedgeTrades := Mc.TradeBranch.UnhedgeTrades
 	Mc.TradeBranch.Trades = append(Mc.TradeBranch.Trades, unhedgeTrades...)
-	if len(Mc.TradeBranch.Trades) > 105{
+	if len(Mc.TradeBranch.Trades) > 105 {
 		Mc.TradeBranch.Trades = Mc.TradeBranch.Trades[len(Mc.TradeBranch.Trades)-105:]
 	}
 	Mc.TradeBranch.UnhedgeTrades = []Trade{}
@@ -74,7 +82,6 @@ func (Mc *MaxClient) ReadUnhedgeTrades() []Trade {
 	defer Mc.TradeBranch.RUnlock()
 	return Mc.TradeBranch.UnhedgeTrades
 }
-
 
 // update part
 
@@ -92,8 +99,67 @@ func (Mc *MaxClient) UpdateExchangeInfo(exInfo ExchangeInfo) {
 
 func (Mc *MaxClient) UpdateOrders(wsOrders map[int32]WsOrder) {
 	Mc.OrdersBranch.Lock()
-	defer Mc.OrdersBranch.Unlock()
 	Mc.OrdersBranch.Orders = wsOrders
+	Mc.OrdersBranch.Unlock()
+
+	newOrderNubmer := make(map[string]NumbersOfOrder)
+	for _, v := range wsOrders {
+		m := v.Market
+		NBid, NAsk := 0, 0
+		if strings.EqualFold(v.Side, "BUY") {
+			NBid = 1
+		} else {
+			NAsk = 1
+		}
+		if NOO, ok := newOrderNubmer[m]; !ok {
+			newOrderNubmer[m] = NumbersOfOrder{
+				NBid: NBid,
+				NAsk: NAsk,
+			}
+		} else {
+			NOO.NAsk += NAsk
+			NOO.NBid += NBid
+			newOrderNubmer[m] = NOO
+		}
+	}
+	Mc.OrderNumbersBranch.Lock()
+	Mc.OrderNumbersBranch.OrderNumbers = newOrderNubmer
+	Mc.OrderNumbersBranch.Unlock()
+}
+
+func (Mc *MaxClient) AddOrder(market string, side string, change int) {
+	Mc.OrderNumbersBranch.Lock()
+	defer Mc.OrderNumbersBranch.Unlock()
+
+	if NOO, ok := Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)]; !ok {
+		if change < 0 {
+			change = 0
+		}
+		if strings.EqualFold(side, "BUY") {
+			Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+				NBid: change,
+				NAsk: 0,
+			}
+		} else {
+			Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+				NBid: 0,
+				NAsk: change,
+			}
+		}
+	} else {
+		if strings.EqualFold(side, "BUY") {
+			NOO.NBid += change
+			if NOO.NBid < 0 {
+				NOO.NBid = 0
+			}
+		} else {
+			NOO.NAsk += change
+			if NOO.NAsk < 0 {
+				NOO.NAsk = 0
+			}
+		}
+		Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NOO
+	}
 }
 
 func (Mc *MaxClient) AddTrades(trades []Trade) {
@@ -101,7 +167,6 @@ func (Mc *MaxClient) AddTrades(trades []Trade) {
 	defer Mc.TradeBranch.Unlock()
 	Mc.TradeBranch.Trades = append(Mc.TradeBranch.Trades, trades...)
 }
-
 
 func (Mc *MaxClient) UpdateTrades(trades []Trade) {
 	Mc.TradeBranch.Lock()
@@ -115,7 +180,7 @@ func (Mc *MaxClient) UpdateUnhedgeTrades(unhedgetrades []Trade) {
 	Mc.TradeBranch.UnhedgeTrades = unhedgetrades
 }
 
-func (Mc *MaxClient) TradesArrived(trades []Trade){
+func (Mc *MaxClient) TradesArrived(trades []Trade) {
 	Mc.TradeBranch.Lock()
 	Mc.TradeBranch.UnhedgeTrades = append(Mc.TradeBranch.UnhedgeTrades, trades...)
 	Mc.TradeBranch.Unlock()
@@ -143,7 +208,7 @@ func (Mc *MaxClient) UpdateBalance(asset string, change float64) {
 	Mc.BalanceBranch.Lock()
 	defer Mc.BalanceBranch.Unlock()
 	b := Mc.BalanceBranch.Balance[strings.ToLower(asset)]
-	b.Locked += change 
+	b.Locked += change
 	Mc.BalanceBranch.Balance[strings.ToLower(asset)] = b
 }
 
@@ -155,8 +220,6 @@ func (Mc *MaxClient) LockBalance(asset string, lock float64) {
 	b.Avaliable -= lock
 	Mc.BalanceBranch.Balance[strings.ToLower(asset)] = b
 }
-
-
 
 // ########### assistant functions ###########
 func (Mc *MaxClient) checkBaseQuote(market string) (base, quote string, err error) {

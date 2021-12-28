@@ -122,14 +122,14 @@ func (Mc *MaxClient) RunWithTradeChannel(ctx context.Context, tradeChan chan []T
 
 				_, err := Mc.GetBalance()
 				if err != nil {
-					LogWarningToDailyLogFile(err, ". in routine checking")
+					LogWarningToDailyLogFile(err, ". in routine checking balance")
 				}
 
 				_, err = Mc.GetAllOrders()
 				if err != nil {
-					LogWarningToDailyLogFile(err, ". in routine checking")
+					LogWarningToDailyLogFile(err, ". in routine checking orders")
 				}
-				time.Sleep( time.Minute)
+				time.Sleep(time.Minute)
 			}
 
 		}
@@ -184,10 +184,12 @@ func NewMaxClient(ctx context.Context, APIKEY, APISECRET string) *MaxClient {
 	m.ShutingBranch.shut = false
 	m.ApiClient = apiclient
 	m.OrdersBranch.Orders = make(map[int32]WsOrder)
+	m.OrderNumbersBranch.OrderNumbers = make(map[string]NumbersOfOrder)
 	m.FilledOrdersBranch.Partial = make(map[int32]WsOrder)
 	m.FilledOrdersBranch.Filled = make(map[int32]WsOrder)
 	m.MarketsBranch.Markets = markets
 	m.BalanceBranch.Balance = make(map[string]Balance)
+	
 	return &m
 }
 

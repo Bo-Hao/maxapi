@@ -58,6 +58,11 @@ type MaxClient struct {
 		sync.RWMutex
 	}
 
+	OrderNumbersBranch struct{
+		OrderNumbers map[string]NumbersOfOrder
+		sync.RWMutex
+	}
+
 	// filled orders
 	FilledOrdersBranch struct {
 		Filled  map[int32]WsOrder
@@ -125,6 +130,11 @@ type HedgingOrder struct {
 	MarketSide         string
 	Fee                float64
 	FeeCurrency        string
+}
+
+type NumbersOfOrder struct{
+	NBid int 
+	NAsk int
 }
 
 type WsOrder struct {

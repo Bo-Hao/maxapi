@@ -221,6 +221,8 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 	for i := 0; i < len(wsOrders); i++ {
 		if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
 			Mc.OrdersBranch.Orders[wsOrders[i].Id] = wsOrders[i]
+			
+			Mc.AddOrder(wsOrders[i].Market, wsOrders[i].Side, 1)
 			//fmt.Println("new order arrived: ", wsOrders[i])
 		} else {
 			switch wsOrders[i].State {
@@ -228,15 +230,17 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 				/* if wsOrders[i].ExecutedVolume != "0" {
 					Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
 				} */
+				Mc.AddOrder(wsOrders[i].Market, wsOrders[i].Side, -1)
 				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
 			case "done":
 				//Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
+				Mc.AddOrder(wsOrders[i].Market, wsOrders[i].Side, -1)
 				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
 			default:
 				if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
 					Mc.OrdersBranch.Orders[wsOrders[i].Id] = wsOrders[i]
 				}
-				Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
+				//Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
 			}
 		}
 	}
