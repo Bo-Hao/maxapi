@@ -112,7 +112,7 @@ func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 		NBid, NAsk := 0, 0
 		for j := 0; j < len(orders); j++ {
 			newOrders[orders[j].Id] = WsOrder(orders[j])
-			if strings.EqualFold(orders[i].Side, "BUY") {
+			if strings.EqualFold(orders[j].Side, "BUY") {
 				NBid += 1
 			} else {
 				NAsk += 1
