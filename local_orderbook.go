@@ -180,7 +180,7 @@ func (o *OrderbookBranch) handleMaxBookSocketMsg(msg []byte) error {
 	var err2 error
 	switch event {
 	case "subscribed":
-		LogInfoToDailyLogFile("websocket subscribed")
+		//LogInfoToDailyLogFile("websocket subscribed")
 	case "snapshot":
 		err2 = o.parseOrderbookSnapshotMsg(msgMap)
 	case "update":
