@@ -75,15 +75,14 @@ func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 			NAsk += 1
 		}
 	}
-	Mc.OrderNumbersBranch.Lock()
-	Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
+	Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
 		NBid: NBid,
 		NAsk: NAsk,
 	}
-	Mc.OrderNumbersBranch.Unlock()
-
-	Mc.OrdersBranch.Lock()
-	defer Mc.OrdersBranch.Unlock()
+	
+	
 	oldOrders := Mc.OrdersBranch.Orders
 	for key, value := range oldOrders {
 		if _, ok := wsOrders[key]; !ok && strings.EqualFold(value.Market, market) {
@@ -100,35 +99,44 @@ func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 // Get orders of all markets.
 func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 	newOrders := map[int32]WsOrder{}
+	newOrderNumbers := make(map[string]NumbersOfOrder)
 
-	markets := Mc.ReadMarkets()
-	for i := 0; i < len(markets); i++ {
-		marketId := markets[i].Id
-		orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, marketId, nil)
-		if err != nil {
-			return map[int32]WsOrder{}, err
-		}
-
-		NBid, NAsk := 0, 0
-		for j := 0; j < len(orders); j++ {
-			newOrders[orders[j].Id] = WsOrder(orders[j])
-			if strings.EqualFold(orders[j].Side, "BUY") {
-				NBid += 1
-			} else {
-				NAsk += 1
-			}
-		}
-		Mc.OrderNumbersBranch.Lock()
-		Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(marketId)] = NumbersOfOrder{
-			NBid: NBid,
-			NAsk: NAsk,
-		}
-		Mc.OrderNumbersBranch.Unlock()
+	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, "all", nil)
+	if err != nil {
+		return map[int32]WsOrder{}, err
 	}
 
+	for i := 0; i < len(orders); i++ {
+		newOrders[orders[i].Id] = WsOrder(orders[i])
+		side := orders[i].Side
+		market := orders[i].Market
+
+		if NOO, ok := newOrderNumbers[strings.ToLower(market)]; !ok {
+			if strings.EqualFold(side, "bid") {
+				Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+					NBid: 1,
+					NAsk: 0,
+				}
+			} else {
+				Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+					NBid: 0,
+					NAsk: 1,
+				}
+			}
+		} else {
+			if strings.EqualFold(side, "bid") {
+				NOO.NBid += 1
+			} else {
+				NOO.NAsk += 1
+			}
+			Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NOO
+		}
+	}
 	Mc.OrdersBranch.Lock()
 	defer Mc.OrdersBranch.Unlock()
 	Mc.OrdersBranch.Orders = newOrders
+	Mc.OrdersBranch.OrderNumbers = newOrderNumbers
+
 	return newOrders, nil
 }
 
@@ -151,9 +159,9 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 		return []WsOrder{}, errors.New("fail to cancel all orders")
 	}
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
-	if len(canceledOrders) > 0 {
+	/* if len(canceledOrders) > 0 {
 		LogInfoToDailyLogFile("Cancel ", len(canceledOrders), " Orders by CancelAllOrders.")
-	}
+	} */
 
 	// data update
 	// local balance update

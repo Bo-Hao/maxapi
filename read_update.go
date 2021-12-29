@@ -21,9 +21,9 @@ func (Mc *MaxClient) ReadExchangeInfo() ExchangeInfo {
 }
 
 func (Mc *MaxClient) ReadNumberOfOrder(market string) (NAsk, NBid int) {
-	Mc.OrderNumbersBranch.RLock()
-	defer Mc.OrderNumbersBranch.RUnlock()
-	NOO := Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)]
+	Mc.OrdersBranch.RLock()
+	defer Mc.OrdersBranch.RUnlock()
+	NOO := Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)]
 	NAsk = NOO.NAsk
 	NBid = NOO.NBid
 	return
@@ -122,32 +122,31 @@ func (Mc *MaxClient) UpdateOrders(wsOrders map[int32]WsOrder) {
 			newOrderNubmer[m] = NOO
 		}
 	}
-	Mc.OrderNumbersBranch.Lock()
-	Mc.OrderNumbersBranch.OrderNumbers = newOrderNubmer
-	Mc.OrderNumbersBranch.Unlock()
+	Mc.OrdersBranch.Lock()
+	Mc.OrdersBranch.OrderNumbers = newOrderNubmer
+	Mc.OrdersBranch.Unlock()
 }
 
 func (Mc *MaxClient) AddOrder(market string, side string, change int) {
-	Mc.OrderNumbersBranch.Lock()
-	defer Mc.OrderNumbersBranch.Unlock()
-
-	if NOO, ok := Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)]; !ok {
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
+	if NOO, ok := Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)]; !ok {
 		if change < 0 {
 			change = 0
 		}
-		if strings.EqualFold(side, "BUY") {
-			Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+		if strings.EqualFold(side, "bid") {
+			Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
 				NBid: change,
 				NAsk: 0,
 			}
 		} else {
-			Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
+			Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
 				NBid: 0,
 				NAsk: change,
 			}
 		}
 	} else {
-		if strings.EqualFold(side, "BUY") {
+		if strings.EqualFold(side, "bid") {
 			NOO.NBid += change
 			if NOO.NBid < 0 {
 				NOO.NBid = 0
@@ -158,7 +157,7 @@ func (Mc *MaxClient) AddOrder(market string, side string, change int) {
 				NOO.NAsk = 0
 			}
 		}
-		Mc.OrderNumbersBranch.OrderNumbers[strings.ToLower(market)] = NOO
+		Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NOO
 	}
 }
 

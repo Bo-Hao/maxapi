@@ -213,15 +213,10 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 	var wsOrders []WsOrder
 	json.Unmarshal(jsonbody, &wsOrders)
 
-	Mc.OrdersBranch.Lock()
-	defer Mc.OrdersBranch.Unlock()
-	/* Mc.FilledOrdersBranch.Lock()
-	defer Mc.FilledOrdersBranch.Unlock() */
-
 	for i := 0; i < len(wsOrders); i++ {
 		if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
 			Mc.OrdersBranch.Orders[wsOrders[i].Id] = wsOrders[i]
-			
+
 			Mc.AddOrder(wsOrders[i].Market, wsOrders[i].Side, 1)
 			//fmt.Println("new order arrived: ", wsOrders[i])
 		} else {
@@ -231,14 +226,24 @@ func (Mc *MaxClient) parseOrderUpdateMsg(msgMap map[string]interface{}) error {
 					Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
 				} */
 				Mc.AddOrder(wsOrders[i].Market, wsOrders[i].Side, -1)
+
+				Mc.OrdersBranch.Lock()
 				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
+				Mc.OrdersBranch.Unlock()
+
 			case "done":
 				//Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
 				Mc.AddOrder(wsOrders[i].Market, wsOrders[i].Side, -1)
+
+				Mc.OrdersBranch.Lock()
 				delete(Mc.OrdersBranch.Orders, wsOrders[i].Id)
+				Mc.OrdersBranch.Unlock()
 			default:
 				if _, ok := Mc.OrdersBranch.Orders[wsOrders[i].Id]; !ok {
+					Mc.OrdersBranch.Lock()
 					Mc.OrdersBranch.Orders[wsOrders[i].Id] = wsOrders[i]
+					Mc.OrdersBranch.Unlock()
+
 				}
 				//Mc.FilledOrdersBranch.Filled[wsOrders[i].Id] = wsOrders[i]
 			}

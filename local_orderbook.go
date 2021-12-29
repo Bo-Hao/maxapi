@@ -78,7 +78,7 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 	if err != nil {
 		LogFatalToDailyLogFile(err)
 	}
-	LogInfoToDailyLogFile("Connected:", url)
+	//LogInfoToDailyLogFile("Connected:", url)
 	o.conn = conn
 	o.onErrBranch.mutex.Lock()
 	o.onErrBranch.onErr = false
@@ -129,8 +129,8 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 
 		// if there is something wrong that the WS should be reconnected.
 		if o.onErrBranch.onErr {
-			message := "max websocket reconnecting"
-			LogInfoToDailyLogFile(message)
+			//message := "max websocket reconnecting"
+			//LogInfoToDailyLogFile(message)
 			NoErr = false
 		}
 	} // end for
@@ -295,61 +295,37 @@ func (o *OrderbookBranch) parseOrderbookSnapshotMsg(msgMap map[string]interface{
 
 func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
 	allAsks := make([][]string, 0, len(updateAsks)+len(oldAsks))
-	uLen := len(updateAsks)
-	oLen := len(oldAsks)
+	bidsMap := make(map[string]string)
+	for i := 0; i < len(updateAsks); i ++{
+		price := updateAsks[i][0]
+		volume := updateAsks[i][1]
+		bidsMap[price] = volume
+	}
 
-	if uLen == 0 {
-		return oldAsks, nil
+	for i := 0; i < len(oldAsks); i ++{
+		price := oldAsks[i][0]
+		volume := oldAsks[i][1]
+		if _, ok := bidsMap[price]; !ok {
+			bidsMap[price]= volume
+		}else{
+			if volume == "0"{
+				delete(bidsMap, price)
+			}else {
+				bidsMap[price] = volume
+			}	
+		}
+	}
+
+	for k, v := range bidsMap{
+		allAsks  = append(allAsks, []string{k, v})
 	}
 
 	// sort them ascently
-	sort.Slice(updateAsks, func(i, j int) bool { return updateAsks[i][0] < updateAsks[j][0] })
-	sort.Slice(oldAsks, func(i, j int) bool { return oldAsks[i][0] < oldAsks[j][0] })
-
-	uIdx := 0
-	oIdx := 0
-	for {
-		uAsk := updateAsks[uIdx]
-		oAsk := oldAsks[oIdx]
-
-		if uAsk[0] == oAsk[0] {
-			if uAsk[1] != "0" {
-				allAsks = append(allAsks, uAsk)
-			}
-			uIdx++
-			oIdx++
-		} else {
-			uP, err := strconv.ParseFloat(uAsk[0], 64)
-			if err != nil {
-				return [][]string{}, errors.New("fail to parse float64")
-			}
-			oP, err := strconv.ParseFloat(oAsk[0], 64)
-			if err != nil {
-				return [][]string{}, errors.New("fail to parse float64")
-			}
-
-			if uP > oP {
-				allAsks = append(allAsks, oAsk)
-				oIdx++
-			} else if uP < oP {
-				allAsks = append(allAsks, uAsk)
-				uIdx++
-			}
-		}
-
-		if uIdx >= uLen-1 && oIdx >= oLen-1 {
-			break
-		}
-		if uIdx == uLen-1 {
-			allAsks = append(allAsks, oldAsks[oIdx:]...)
-			break
-		}
-		if oIdx == oLen-1 {
-			allAsks = append(allAsks, updateAsks[uIdx:]...)
-			break
-		}
-
-	}
+	sort.Slice(allAsks, func(i, j int) bool { 
+		pi, _ := strconv.ParseFloat(allAsks[i][0], 64)
+		pj, _ := strconv.ParseFloat(allAsks[j][0], 64)
+		return pi < pj
+	})
 
 	if len(allAsks) >= 10 {
 		allAsks = allAsks[:10]
@@ -360,62 +336,37 @@ func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
 
 func updateBids(updateBids [][]string, oldBids [][]string) ([][]string, error) {
 	allBids := make([][]string, 0, len(updateBids)+len(oldBids))
-	uLen := len(updateBids)
-	oLen := len(oldBids)
-
-	if uLen == 0 {
-		return oldBids, nil
+	bidsMap := make(map[string]string)
+	for i := 0; i < len(updateBids); i ++{
+		price := updateBids[i][0]
+		volume := updateBids[i][1]
+		bidsMap[price] = volume
 	}
 
-	// sort them descently
-	sort.Slice(updateBids, func(i, j int) bool { return updateBids[i][0] > updateBids[j][0] })
-	sort.Slice(oldBids, func(i, j int) bool { return oldBids[i][0] > oldBids[j][0] })
-
-	uIdx := 0
-	oIdx := 0
-	for {
-		uBid := updateBids[uIdx]
-		oBid := oldBids[oIdx]
-
-		if uBid[0] == oBid[0] {
-			if uBid[1] != "0" {
-				allBids = append(allBids, uBid)
-			}
-			uIdx++
-			oIdx++
-		} else {
-			uP, err := strconv.ParseFloat(uBid[0], 64)
-			if err != nil {
-				return [][]string{}, errors.New("fail to parse float64")
-			}
-			oP, err := strconv.ParseFloat(oBid[0], 64)
-			if err != nil {
-				return [][]string{}, errors.New("fail to parse float64")
-			}
-
-			if uP < oP {
-				allBids = append(allBids, oBid)
-				oIdx++
-			} else if uP > oP {
-				allBids = append(allBids, uBid)
-				uIdx++
-			}
+	for i := 0; i < len(oldBids); i ++{
+		price := oldBids[i][0]
+		volume := oldBids[i][1]
+		if _, ok := bidsMap[price]; !ok {
+			bidsMap[price]= volume
+		}else{
+			if volume == "0"{
+				delete(bidsMap, price)
+			}else {
+				bidsMap[price] = volume
+			}	
 		}
-
-		if uIdx == uLen-1 && oIdx == oLen-1 {
-			break
-		}
-
-		if uIdx == uLen-1 {
-			allBids = append(allBids, oldBids[oIdx:]...)
-			break
-		}
-		if oIdx == oLen-1 {
-			allBids = append(allBids, updateBids[uIdx:]...)
-			break
-		}
-
 	}
+
+	for k, v := range bidsMap{
+		allBids  = append(allBids, []string{k, v})
+	}
+
+	sort.Slice(allBids, func(i, j int) bool { 
+		pi, _ := strconv.ParseFloat(allBids[i][0], 64)
+		pj, _ := strconv.ParseFloat(allBids[j][0], 64)
+		return pi > pj
+	})
+
 
 	if len(allBids) >= 10 {
 		allBids = allBids[:10]

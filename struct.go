@@ -55,10 +55,6 @@ type MaxClient struct {
 	// limit unfilled orders
 	OrdersBranch struct {
 		Orders map[int32]WsOrder
-		sync.RWMutex
-	}
-
-	OrderNumbersBranch struct{
 		OrderNumbers map[string]NumbersOfOrder
 		sync.RWMutex
 	}

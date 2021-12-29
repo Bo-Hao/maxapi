@@ -184,7 +184,7 @@ func NewMaxClient(ctx context.Context, APIKEY, APISECRET string) *MaxClient {
 	m.ShutingBranch.shut = false
 	m.ApiClient = apiclient
 	m.OrdersBranch.Orders = make(map[int32]WsOrder)
-	m.OrderNumbersBranch.OrderNumbers = make(map[string]NumbersOfOrder)
+	m.OrdersBranch.OrderNumbers = make(map[string]NumbersOfOrder)
 	m.FilledOrdersBranch.Partial = make(map[int32]WsOrder)
 	m.FilledOrdersBranch.Filled = make(map[int32]WsOrder)
 	m.MarketsBranch.Markets = markets
