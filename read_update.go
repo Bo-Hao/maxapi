@@ -106,7 +106,7 @@ func (Mc *MaxClient) UpdateOrders(wsOrders map[int32]WsOrder) {
 	for _, v := range wsOrders {
 		m := v.Market
 		NBid, NAsk := 0, 0
-		if strings.EqualFold(v.Side, "BUY") {
+		if strings.EqualFold(v.Side, "BUY") || strings.EqualFold(v.Side, "bid") {
 			NBid = 1
 		} else {
 			NAsk = 1
@@ -134,7 +134,7 @@ func (Mc *MaxClient) AddOrder(market string, side string, change int) {
 		if change < 0 {
 			change = 0
 		}
-		if strings.EqualFold(side, "bid") {
+		if strings.EqualFold(side, "BUY") ||  strings.EqualFold(side, "bid") {
 			Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
 				NBid: change,
 				NAsk: 0,
@@ -146,7 +146,7 @@ func (Mc *MaxClient) AddOrder(market string, side string, change int) {
 			}
 		}
 	} else {
-		if strings.EqualFold(side, "bid") {
+		if strings.EqualFold(side, "BUY") ||  strings.EqualFold(side, "bid") {
 			NOO.NBid += change
 			if NOO.NBid < 0 {
 				NOO.NBid = 0

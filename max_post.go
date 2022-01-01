@@ -69,7 +69,7 @@ func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 		order := WsOrder(orders[i])
 		wsOrders[order.Id] = order
 
-		if strings.EqualFold(orders[i].Side, "BUY") {
+		if strings.EqualFold(orders[i].Side, "bid") {
 			NBid += 1
 		} else {
 			NAsk += 1
@@ -268,9 +268,9 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 }
 
 func (Mc *MaxClient) PlaceLimitOrder(market string, side string, price, volume float64) (WsOrder, error) {
-	if isEnough := Mc.checkBalanceEnoughLocal(market, side, price, volume); !isEnough {
+	/* if isEnough := Mc.checkBalanceEnoughLocal(market, side, price, volume); !isEnough {
 		return WsOrder{}, errors.New("balance is not enough for trading")
-	}
+	} */
 
 	params := make(map[string]interface{})
 	params["price"] = fmt.Sprint(price)
