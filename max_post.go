@@ -81,8 +81,7 @@ func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 		NBid: NBid,
 		NAsk: NAsk,
 	}
-	
-	
+
 	oldOrders := Mc.OrdersBranch.Orders
 	for key, value := range oldOrders {
 		if _, ok := wsOrders[key]; !ok && strings.EqualFold(value.Market, market) {
@@ -106,6 +105,9 @@ func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 		return map[int32]WsOrder{}, err
 	}
 
+	// mux
+	Mc.OrdersBranch.Lock()
+	defer Mc.OrdersBranch.Unlock()
 	for i := 0; i < len(orders); i++ {
 		newOrders[orders[i].Id] = WsOrder(orders[i])
 		side := orders[i].Side
@@ -132,8 +134,7 @@ func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
 			Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NOO
 		}
 	}
-	Mc.OrdersBranch.Lock()
-	defer Mc.OrdersBranch.Unlock()
+
 	Mc.OrdersBranch.Orders = newOrders
 	Mc.OrdersBranch.OrderNumbers = newOrderNumbers
 
