@@ -264,7 +264,7 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 	return nil
 }
 
-/* func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int32]WsOrder) error {
+/* func (Mc *MaxClient) trackingOrders(snapshotWsOrders map[int64]WsOrder) error {
 	Mc.WsClient.TmpBranch.Lock()
 	defer Mc.WsClient.TmpBranch.Unlock()
 
@@ -274,8 +274,8 @@ func (Mc *MaxClient) parseTradeSnapshotMsg(msgMap map[string]interface{}) error 
 		return nil
 	}
 
-	untrackedWsOrders := map[int32]WsOrder{}
-	trackedWsOrders := map[int32]WsOrder{}
+	untrackedWsOrders := map[int64]WsOrder{}
+	trackedWsOrders := map[int64]WsOrder{}
 
 	for wsorderId, wsorder := range Mc.WsClient.TmpBranch.Orders {
 		if _, ok := snapshotWsOrders[wsorderId]; ok && wsorder.State != "Done" {
@@ -312,7 +312,7 @@ func (Mc *MaxClient) trackingTrades(snapshottrades []Trade) error {
 
 	untrades := Mc.ReadUnhedgeTrades()
 
-	tradeMap := map[int32]struct{}{}
+	tradeMap := map[int64]struct{}{}
 	oldTrades = append(oldTrades, untrades...)
 	for i := 0; i < len(oldTrades); i++ {
 		tradeMap[oldTrades[i].Id] = struct{}{}
@@ -535,7 +535,7 @@ func (Mc *MaxClient) parseTradeSnapshotMsgWithChannel(msgMap map[string]interfac
 		return nil
 	}
 
-	tradeMap := map[int32]struct{}{}
+	tradeMap := map[int64]struct{}{}
 	for i := 0; i < len(oldTrades); i++ {
 		tradeMap[oldTrades[i].Id] = struct{}{}
 	}

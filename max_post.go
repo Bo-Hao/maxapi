@@ -186,7 +186,7 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 	return canceledWsOrders, nil
 }
 
-func (Mc *MaxClient) CancelOrder(market string, id int32) (WsOrder, error) {
+func (Mc *MaxClient) CancelOrder(market string, id int64) (WsOrder, error) {
 	CanceledOrder, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrderDelete(context.Background(), Mc.apiKey, Mc.apiSecret, id)
 	if err != nil {
 		return WsOrder{}, errors.New("fail to cancel order" + strconv.Itoa(int(id)))

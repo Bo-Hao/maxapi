@@ -27,7 +27,7 @@ type OrderbookBranch struct {
 	bids                       bookBranch
 	asks                       bookBranch
 	lastUpdatedTimestampBranch struct {
-		timestamp int32
+		timestamp int64
 		mux       sync.RWMutex
 	}
 }
@@ -38,7 +38,7 @@ type bookstruct struct {
 	Market    string     `json:"M,omitempty"`
 	Asks      [][]string `json:"a,omitempty"`
 	Bids      [][]string `json:"b,omitempty"`
-	Timestamp int32      `json:"T,omitempty"`
+	Timestamp int64      `json:"T,omitempty"`
 }
 
 type bookBranch struct {
@@ -296,32 +296,32 @@ func (o *OrderbookBranch) parseOrderbookSnapshotMsg(msgMap map[string]interface{
 func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
 	allAsks := make([][]string, 0, len(updateAsks)+len(oldAsks))
 	bidsMap := make(map[string]string)
-	for i := 0; i < len(updateAsks); i ++{
+	for i := 0; i < len(updateAsks); i++ {
 		price := updateAsks[i][0]
 		volume := updateAsks[i][1]
 		bidsMap[price] = volume
 	}
 
-	for i := 0; i < len(oldAsks); i ++{
+	for i := 0; i < len(oldAsks); i++ {
 		price := oldAsks[i][0]
 		volume := oldAsks[i][1]
 		if _, ok := bidsMap[price]; !ok {
-			bidsMap[price]= volume
-		}else{
-			if volume == "0"{
+			bidsMap[price] = volume
+		} else {
+			if volume == "0" {
 				delete(bidsMap, price)
-			}else {
+			} else {
 				bidsMap[price] = volume
-			}	
+			}
 		}
 	}
 
-	for k, v := range bidsMap{
-		allAsks  = append(allAsks, []string{k, v})
+	for k, v := range bidsMap {
+		allAsks = append(allAsks, []string{k, v})
 	}
 
 	// sort them ascently
-	sort.Slice(allAsks, func(i, j int) bool { 
+	sort.Slice(allAsks, func(i, j int) bool {
 		pi, _ := strconv.ParseFloat(allAsks[i][0], 64)
 		pj, _ := strconv.ParseFloat(allAsks[j][0], 64)
 		return pi < pj
@@ -337,36 +337,35 @@ func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
 func updateBids(updateBids [][]string, oldBids [][]string) ([][]string, error) {
 	allBids := make([][]string, 0, len(updateBids)+len(oldBids))
 	bidsMap := make(map[string]string)
-	for i := 0; i < len(updateBids); i ++{
+	for i := 0; i < len(updateBids); i++ {
 		price := updateBids[i][0]
 		volume := updateBids[i][1]
 		bidsMap[price] = volume
 	}
 
-	for i := 0; i < len(oldBids); i ++{
+	for i := 0; i < len(oldBids); i++ {
 		price := oldBids[i][0]
 		volume := oldBids[i][1]
 		if _, ok := bidsMap[price]; !ok {
-			bidsMap[price]= volume
-		}else{
-			if volume == "0"{
+			bidsMap[price] = volume
+		} else {
+			if volume == "0" {
 				delete(bidsMap, price)
-			}else {
+			} else {
 				bidsMap[price] = volume
-			}	
+			}
 		}
 	}
 
-	for k, v := range bidsMap{
-		allBids  = append(allBids, []string{k, v})
+	for k, v := range bidsMap {
+		allBids = append(allBids, []string{k, v})
 	}
 
-	sort.Slice(allBids, func(i, j int) bool { 
+	sort.Slice(allBids, func(i, j int) bool {
 		pi, _ := strconv.ParseFloat(allBids[i][0], 64)
 		pj, _ := strconv.ParseFloat(allBids[j][0], 64)
 		return pi > pj
 	})
-
 
 	if len(allBids) >= 10 {
 		allBids = allBids[:10]

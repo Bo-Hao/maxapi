@@ -213,7 +213,7 @@ cancel an order
 @param xMAXSIGNATURE encrypted signature
 @param id unique order id
 @return Order*/
-func (a *PrivateApiService) PostApiV2OrderDelete(ctx context.Context, xMAXACCESSKEY string, xMAXSECRET string, id int32) (Order, *http.Response, error) {
+func (a *PrivateApiService) PostApiV2OrderDelete(ctx context.Context, xMAXACCESSKEY string, xMAXSECRET string, id int64) (Order, *http.Response, error) {
 	var (
 		localVarHTTPMethod = strings.ToUpper("Post")
 		localVarFileName   string
@@ -521,9 +521,9 @@ get your orders, results is paginated.
     @param "state" (string) filter by state, default to &#39;wait&#39;
     @param "orderBy" (string) order in created time, default to &#39;asc&#39;.
     @param "pagination" (bool) do pagination &amp; return metadata in header (default true)
-    @param "page" (int32) page number, applied for pagination (default 1)
-    @param "limit" (int32) returned limit (1~1000, default 100)
-    @param "offset" (int32) records to skip, not applied for pagination (default 0)
+    @param "page" (int64) page number, applied for pagination (default 1)
+    @param "limit" (int64) returned limit (1~1000, default 100)
+    @param "offset" (int64) records to skip, not applied for pagination (default 0)
 @return []Order*/
 func (a *PrivateApiService) GetApiV2Orders(ctx context.Context, xMAXACCESSKEY string, xMAXSECRET string, market string, localVarOptionals map[string]interface{}) ([]Order, *http.Response, error) {
 	var (
@@ -553,13 +553,13 @@ func (a *PrivateApiService) GetApiV2Orders(ctx context.Context, xMAXACCESSKEY st
 	if err := typeCheckParameter(localVarOptionals["pagination"], "bool", "pagination"); err != nil {
 		return successPayload, nil, err
 	}
-	if err := typeCheckParameter(localVarOptionals["page"], "int32", "page"); err != nil {
+	if err := typeCheckParameter(localVarOptionals["page"], "int64", "page"); err != nil {
 		return successPayload, nil, err
 	}
-	if err := typeCheckParameter(localVarOptionals["limit"], "int32", "limit"); err != nil {
+	if err := typeCheckParameter(localVarOptionals["limit"], "int64", "limit"); err != nil {
 		return successPayload, nil, err
 	}
-	if err := typeCheckParameter(localVarOptionals["offset"], "int32", "offset"); err != nil {
+	if err := typeCheckParameter(localVarOptionals["offset"], "int64", "offset"); err != nil {
 		return successPayload, nil, err
 	}
 
@@ -573,13 +573,13 @@ func (a *PrivateApiService) GetApiV2Orders(ctx context.Context, xMAXACCESSKEY st
 	if localVarTempParam, localVarOk := localVarOptionals["pagination"].(bool); localVarOk {
 		localVarQueryParams.Add("pagination", parameterToString(localVarTempParam, ""))
 	}
-	if localVarTempParam, localVarOk := localVarOptionals["page"].(int32); localVarOk {
+	if localVarTempParam, localVarOk := localVarOptionals["page"].(int64); localVarOk {
 		localVarQueryParams.Add("page", parameterToString(localVarTempParam, ""))
 	}
-	if localVarTempParam, localVarOk := localVarOptionals["limit"].(int32); localVarOk {
+	if localVarTempParam, localVarOk := localVarOptionals["limit"].(int64); localVarOk {
 		localVarQueryParams.Add("limit", parameterToString(localVarTempParam, ""))
 	}
-	if localVarTempParam, localVarOk := localVarOptionals["offset"].(int32); localVarOk {
+	if localVarTempParam, localVarOk := localVarOptionals["offset"].(int64); localVarOk {
 		localVarQueryParams.Add("offset", parameterToString(localVarTempParam, ""))
 	}
 	// to determine the Content-Type header

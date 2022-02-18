@@ -150,13 +150,13 @@ type Market struct {
 	BaseUnit string `json:"base_unit,omitempty"`
 
 	// fixed precision of base unit
-	BaseUnitPrecision int32 `json:"base_unit_precision,omitempty"`
+	BaseUnitPrecision int64 `json:"base_unit_precision,omitempty"`
 
 	// quote unit
 	QuoteUnit string `json:"quote_unit,omitempty"`
 
 	// fixed precision of quote unit
-	QuoteUnitPrecision int32 `json:"quote_unit_precision,omitempty"`
+	QuoteUnitPrecision int64 `json:"quote_unit_precision,omitempty"`
 }
 
 // get all available currencies.
@@ -166,7 +166,7 @@ type Currency struct {
 	Id string `json:"id,omitempty"`
 
 	// fixed precision of the currency
-	Precision int32 `json:"precision,omitempty"`
+	Precision int64 `json:"precision,omitempty"`
 }
 
 type Member struct {
@@ -235,7 +235,7 @@ type Member struct {
 	MemberType string `json:"member_type,omitempty"`
 
 	// member level
-	Level int32 `json:"level,omitempty"`
+	Level int64 `json:"level,omitempty"`
 }
 
 type Bank struct {
@@ -289,7 +289,7 @@ type Account struct {
 type Ticker struct {
 
 	// timestamp in seconds since Unix epoch
-	At int32 `json:"at,omitempty"`
+	At int64 `json:"at,omitempty"`
 
 	// highest buy price
 	Buy string `json:"buy,omitempty"`
@@ -340,7 +340,7 @@ type Order struct {
 	Market string `json:"market,omitempty"`
 
 	// created timestamp (second)
-	CreatedAt int32 `json:"created_at,omitempty"`
+	CreatedAt int64 `json:"created_at,omitempty"`
 
 	// total amount to sell/buy, an order could be partially executed
 	Volume string `json:"volume,omitempty"`
@@ -352,7 +352,7 @@ type Order struct {
 	ExecutedVolume string `json:"executed_volume,omitempty"`
 
 	// trade count
-	TradesCount int32 `json:"trades_count,omitempty"`
+	TradesCount int64 `json:"trades_count,omitempty"`
 }
 
 // get ticker of all markets

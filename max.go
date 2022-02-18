@@ -264,7 +264,7 @@ func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 				Profit:    price * volume * s,
 				Volume:    volume * s,
 				AbsVolume: volume,
-				Timestamp: int32(time.Now().UnixMilli()),
+				Timestamp: int64(time.Now().UnixMilli()),
 			}
 			hedgingOrders[market] = ho
 		}
@@ -332,7 +332,7 @@ func (Mc *MaxClient) DetectUnhedgeTrades() (map[string]HedgingOrder, bool) {
 				Quote:          quote,
 				Profit:         price * volume * s,
 				Volume:         volume * s,
-				Timestamp:      int32(time.Now().UnixMilli()),
+				Timestamp:      int64(time.Now().UnixMilli()),
 				MaxFee:         maxFee,
 				MaxFeeCurrency: trade.FeeCurrency,
 				MaxMaker:       trade.Maker,

@@ -111,7 +111,7 @@ type HedgingOrder struct {
 	Quote          string
 	Profit         float64
 	Volume         float64
-	Timestamp      int32
+	Timestamp      int64
 	AbsVolume      float64
 	MaxFee         float64
 	MaxFeeCurrency string
@@ -119,7 +119,7 @@ type HedgingOrder struct {
 
 	// hedged info
 	TotalProfit        float64
-	MarketTransactTime int32
+	MarketTransactTime int64
 	AvgPrice           float64
 	TransactVolume     float64
 	MarketSide         string
@@ -141,19 +141,19 @@ type WsOrder struct {
 	AvgPrice        string `json:"ap,omitempty"`
 	State           string `json:"S,omitempty"`
 	Market          string `json:"M,omitempty"`
-	CreatedAt       int32  `json:"T,omitempty"`
+	CreatedAt       int64  `json:"T,omitempty"`
 	Volume          string `json:"v,omitempty"`
 	RemainingVolume string `json:"rv,omitempty"`
 	ExecutedVolume  string `json:"ev,omitempty"`
-	TradesCount     int32  `json:"tc,omitempty"`
+	TradesCount     int64  `json:"tc,omitempty"`
 }
 
 type Trade struct {
-	Id          int32  `json:"i,omitempty"`
+	Id          int64  `json:"i,omitempty"`
 	Price       string `json:"p,omitempty"`
 	Volume      string `json:"v,omitempty"`
 	Market      string `json:"M,omitempty"`
-	Timestamp   int32  `json:"T,omitempty"`
+	Timestamp   int64  `json:"T,omitempty"`
 	Side        string `json:"sd,omitempty"`
 	Fee         string `json:"f,omitempty"`
 	FeeCurrency string `json:"fc,omitempty"`
