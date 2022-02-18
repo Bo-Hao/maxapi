@@ -89,7 +89,7 @@ func (Mc *MaxClient) Run(ctx context.Context) {
 	}()
 }
 
-func (Mc *MaxClient) RunWithTradeChannel(ctx context.Context, tradeChan chan []Trade){
+func (Mc *MaxClient) RunWithTradeChannel(ctx context.Context, tradeChan chan []Trade) {
 	go func() {
 		Mc.PriviateWebsocketWithChannel(ctx, tradeChan)
 	}()
@@ -183,13 +183,13 @@ func NewMaxClient(ctx context.Context, APIKEY, APISECRET string) *MaxClient {
 	m.cancelFunc = &cancel
 	m.ShutingBranch.shut = false
 	m.ApiClient = apiclient
-	m.OrdersBranch.Orders = make(map[int32]WsOrder)
+	m.OrdersBranch.Orders = make(map[int64]WsOrder)
 	m.OrdersBranch.OrderNumbers = make(map[string]NumbersOfOrder)
-	m.FilledOrdersBranch.Partial = make(map[int32]WsOrder)
-	m.FilledOrdersBranch.Filled = make(map[int32]WsOrder)
+	m.FilledOrdersBranch.Partial = make(map[int64]WsOrder)
+	m.FilledOrdersBranch.Filled = make(map[int64]WsOrder)
 	m.MarketsBranch.Markets = markets
 	m.BalanceBranch.Balance = make(map[string]Balance)
-	
+
 	return &m
 }
 
@@ -278,7 +278,7 @@ func (Mc *MaxClient) DetectUnhedgeOrders() (map[string]HedgingOrder, bool) {
 
 	}
 
-	Mc.FilledOrdersBranch.Filled = map[int32]WsOrder{}
+	Mc.FilledOrdersBranch.Filled = map[int64]WsOrder{}
 	return hedgingOrders, true
 }
 
@@ -293,7 +293,6 @@ func (Mc *MaxClient) DetectUnhedgeTrades() (map[string]HedgingOrder, bool) {
 
 	hedgingOrders := map[string]HedgingOrder{}
 	unhedgeTrades := Mc.TakeUnhedgeTrades()
-
 
 	for i := 0; i < len(unhedgeTrades); i++ {
 		trade := unhedgeTrades[i]
@@ -328,15 +327,15 @@ func (Mc *MaxClient) DetectUnhedgeTrades() (map[string]HedgingOrder, bool) {
 				LogFatalToDailyLogFile(err)
 			}
 			ho := HedgingOrder{
-				Market:    market,
-				Base:      base,
-				Quote:     quote,
-				Profit:    price * volume * s,
-				Volume:    volume * s,
-				Timestamp: int32(time.Now().UnixMilli()),
-				MaxFee: maxFee,
+				Market:         market,
+				Base:           base,
+				Quote:          quote,
+				Profit:         price * volume * s,
+				Volume:         volume * s,
+				Timestamp:      int32(time.Now().UnixMilli()),
+				MaxFee:         maxFee,
 				MaxFeeCurrency: trade.FeeCurrency,
-				MaxMaker: 	trade.Maker,
+				MaxMaker:       trade.Maker,
 			}
 			hedgingOrders[market] = ho
 		}

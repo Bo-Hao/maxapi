@@ -57,14 +57,14 @@ func (Mc *MaxClient) GetBalance() (map[string]Balance, error) {
 }
 
 // Get orders of the coresponding $market
-func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
+func (Mc *MaxClient) GetOrders(market string) (map[int64]WsOrder, error) {
 	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, nil)
 	if err != nil {
-		return map[int32]WsOrder{}, err
+		return map[int64]WsOrder{}, err
 	}
 
 	NBid, NAsk := 0, 0
-	wsOrders := map[int32]WsOrder{}
+	wsOrders := map[int64]WsOrder{}
 	for i := 0; i < len(orders); i++ {
 		order := WsOrder(orders[i])
 		wsOrders[order.Id] = order
@@ -96,13 +96,13 @@ func (Mc *MaxClient) GetOrders(market string) (map[int32]WsOrder, error) {
 }
 
 // Get orders of all markets.
-func (Mc *MaxClient) GetAllOrders() (map[int32]WsOrder, error) {
-	newOrders := map[int32]WsOrder{}
+func (Mc *MaxClient) GetAllOrders() (map[int64]WsOrder, error) {
+	newOrders := map[int64]WsOrder{}
 	newOrderNumbers := make(map[string]NumbersOfOrder)
 
 	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, "all", nil)
 	if err != nil {
-		return map[int32]WsOrder{}, err
+		return map[int64]WsOrder{}, err
 	}
 
 	// mux
@@ -181,7 +181,7 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 		}
 		Mc.updateLocalBalance(market, side, price, volume, true) // true means this is a cancel order.
 	}
-	Mc.UpdatePartialFilledOrders(map[int32]WsOrder{})
+	Mc.UpdatePartialFilledOrders(map[int64]WsOrder{})
 
 	return canceledWsOrders, nil
 }
@@ -238,7 +238,7 @@ func (Mc *MaxClient) CancelOrders(market, side interface{}) ([]WsOrder, error) {
 	canceledWsOrders := make([]WsOrder, 0, len(canceledOrders))
 
 	// local balance update
-	cancelOrdersKey := []int32{}
+	cancelOrdersKey := []int64{}
 	for i := 0; i < len(canceledOrders); i++ {
 		// update local orders
 		wsOrder := WsOrder(canceledOrders[i])

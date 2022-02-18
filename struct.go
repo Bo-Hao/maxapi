@@ -44,7 +44,7 @@ type MaxClient struct {
 
 		TmpBranch struct {
 			Trades []Trade
-			Orders map[int32]WsOrder
+			Orders map[int64]WsOrder
 			sync.RWMutex
 		}
 	}
@@ -54,22 +54,21 @@ type MaxClient struct {
 
 	// limit unfilled orders
 	OrdersBranch struct {
-		Orders map[int32]WsOrder
+		Orders       map[int64]WsOrder
 		OrderNumbers map[string]NumbersOfOrder
 		sync.RWMutex
 	}
 
 	// filled orders
 	FilledOrdersBranch struct {
-		Filled  map[int32]WsOrder
-		Partial map[int32]WsOrder
+		Filled  map[int64]WsOrder
+		Partial map[int64]WsOrder
 		sync.RWMutex
 	}
 
-
-	TradeBranch struct{
+	TradeBranch struct {
 		UnhedgeTrades []Trade
-		Trades []Trade
+		Trades        []Trade
 		sync.RWMutex
 	}
 
@@ -107,16 +106,16 @@ type Balance struct {
 // check the hedge position
 type HedgingOrder struct {
 	// order
-	Market    string
-	Base      string
-	Quote     string
-	Profit    float64
-	Volume    float64
-	Timestamp int32
-	AbsVolume float64
-	MaxFee float64 
+	Market         string
+	Base           string
+	Quote          string
+	Profit         float64
+	Volume         float64
+	Timestamp      int32
+	AbsVolume      float64
+	MaxFee         float64
 	MaxFeeCurrency string
-	MaxMaker bool
+	MaxMaker       bool
 
 	// hedged info
 	TotalProfit        float64
@@ -128,13 +127,13 @@ type HedgingOrder struct {
 	FeeCurrency        string
 }
 
-type NumbersOfOrder struct{
-	NBid int 
+type NumbersOfOrder struct {
+	NBid int
 	NAsk int
 }
 
 type WsOrder struct {
-	Id              int32  `json:"i,omitempty"`
+	Id              int64  `json:"i,omitempty"`
 	Side            string `json:"sd,omitempty"`
 	OrdType         string `json:"ot,omitempty"`
 	Price           string `json:"p,omitempty"`

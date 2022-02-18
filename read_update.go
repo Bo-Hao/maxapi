@@ -29,19 +29,19 @@ func (Mc *MaxClient) ReadNumberOfOrder(market string) (NAsk, NBid int) {
 	return
 }
 
-func (Mc *MaxClient) ReadOrders() map[int32]WsOrder {
+func (Mc *MaxClient) ReadOrders() map[int64]WsOrder {
 	Mc.OrdersBranch.RLock()
 	defer Mc.OrdersBranch.RUnlock()
 	return Mc.OrdersBranch.Orders
 }
 
-func (Mc *MaxClient) ReadFilledOrders() map[int32]WsOrder {
+func (Mc *MaxClient) ReadFilledOrders() map[int64]WsOrder {
 	Mc.FilledOrdersBranch.RLock()
 	defer Mc.FilledOrdersBranch.RUnlock()
 	return Mc.FilledOrdersBranch.Filled
 }
 
-func (Mc *MaxClient) ReadPartialFilledOrders() map[int32]WsOrder {
+func (Mc *MaxClient) ReadPartialFilledOrders() map[int64]WsOrder {
 	Mc.FilledOrdersBranch.RLock()
 	defer Mc.FilledOrdersBranch.RUnlock()
 	return Mc.FilledOrdersBranch.Partial
@@ -97,7 +97,7 @@ func (Mc *MaxClient) UpdateExchangeInfo(exInfo ExchangeInfo) {
 	Mc.ExchangeInfoBranch.ExInfo = exInfo
 }
 
-func (Mc *MaxClient) UpdateOrders(wsOrders map[int32]WsOrder) {
+func (Mc *MaxClient) UpdateOrders(wsOrders map[int64]WsOrder) {
 	Mc.OrdersBranch.Lock()
 	Mc.OrdersBranch.Orders = wsOrders
 	Mc.OrdersBranch.Unlock()
@@ -134,7 +134,7 @@ func (Mc *MaxClient) AddOrder(market string, side string, change int) {
 		if change < 0 {
 			change = 0
 		}
-		if strings.EqualFold(side, "BUY") ||  strings.EqualFold(side, "bid") {
+		if strings.EqualFold(side, "BUY") || strings.EqualFold(side, "bid") {
 			Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
 				NBid: change,
 				NAsk: 0,
@@ -146,7 +146,7 @@ func (Mc *MaxClient) AddOrder(market string, side string, change int) {
 			}
 		}
 	} else {
-		if strings.EqualFold(side, "BUY") ||  strings.EqualFold(side, "bid") {
+		if strings.EqualFold(side, "BUY") || strings.EqualFold(side, "bid") {
 			NOO.NBid += change
 			if NOO.NBid < 0 {
 				NOO.NBid = 0
@@ -185,13 +185,13 @@ func (Mc *MaxClient) TradesArrived(trades []Trade) {
 	Mc.TradeBranch.Unlock()
 }
 
-func (Mc *MaxClient) UpdateFilledOrders(wsOrders map[int32]WsOrder) {
+func (Mc *MaxClient) UpdateFilledOrders(wsOrders map[int64]WsOrder) {
 	Mc.FilledOrdersBranch.Lock()
 	defer Mc.FilledOrdersBranch.Unlock()
 	Mc.FilledOrdersBranch.Filled = wsOrders
 }
 
-func (Mc *MaxClient) UpdatePartialFilledOrders(wsOrders map[int32]WsOrder) {
+func (Mc *MaxClient) UpdatePartialFilledOrders(wsOrders map[int64]WsOrder) {
 	Mc.FilledOrdersBranch.Lock()
 	defer Mc.FilledOrdersBranch.Unlock()
 	Mc.FilledOrdersBranch.Partial = wsOrders
