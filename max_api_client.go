@@ -315,7 +315,6 @@ type Ticker struct {
 
 // get a specific order.
 type Order struct {
-
 	// unique order id
 	Id int64 `json:"id,omitempty"`
 
