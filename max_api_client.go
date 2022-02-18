@@ -317,7 +317,7 @@ type Ticker struct {
 type Order struct {
 
 	// unique order id
-	Id int32 `json:"id,omitempty"`
+	Id int64 `json:"id,omitempty"`
 
 	// 'sell' or 'buy'
 	Side string `json:"side,omitempty"`

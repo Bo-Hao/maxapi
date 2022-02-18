@@ -187,7 +187,7 @@ func (Mc *MaxClient) handleMaxSocketMsg(msg []byte) error {
 // Order
 //	order_snapshot
 func (Mc *MaxClient) parseOrderSnapshotMsg(msgMap map[string]interface{}) error {
-	snapshotWsOrders := map[int32]WsOrder{}
+	snapshotWsOrders := map[int64]WsOrder{}
 	jsonbody, _ := json.Marshal(msgMap["o"])
 	var wsOrders []WsOrder
 	json.Unmarshal(jsonbody, &wsOrders)
