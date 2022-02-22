@@ -101,6 +101,7 @@ func (Mc *MaxClient) GetAllOrders() (map[int64]WsOrder, error) {
 	newOrderNumbers := make(map[string]NumbersOfOrder)
 
 	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, "all", nil)
+
 	if err != nil {
 		return map[int64]WsOrder{}, err
 	}

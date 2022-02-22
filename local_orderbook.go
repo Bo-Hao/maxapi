@@ -134,6 +134,7 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 			NoErr = false
 		}
 	} // end for
+
 	o.conn.Close()
 
 	if !o.onErrBranch.onErr {
