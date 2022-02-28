@@ -134,6 +134,7 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 			//LogInfoToDailyLogFile(message)
 			NoErr = false
 		}
+		time.Sleep(time.Millisecond)
 	} // end for
 
 	o.conn.Close()
