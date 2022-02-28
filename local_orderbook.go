@@ -5,12 +5,11 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/Bo-Hao/mapbook"
 	"github.com/gorilla/websocket"
 	"github.com/sirupsen/logrus"
 )
@@ -24,8 +23,8 @@ type OrderbookBranch struct {
 	}
 	Market string
 
-	bids                       bookBranch
-	asks                       bookBranch
+	bids                       mapbook.BidBook
+	asks                       mapbook.AskBook
 	lastUpdatedTimestampBranch struct {
 		timestamp int64
 		mux       sync.RWMutex
@@ -52,6 +51,8 @@ func SpotLocalOrderbook(symbol string, logger *logrus.Logger) *OrderbookBranch {
 	ctx, cancel := context.WithCancel(context.Background())
 	o.cancel = &cancel
 	o.Market = strings.ToLower(symbol)
+	o.asks = *mapbook.NewAskBook(false)
+	o.bids = *mapbook.NewBidBook(false)
 	go o.maintain(ctx, symbol)
 	return &o
 }
@@ -211,35 +212,8 @@ func (o *OrderbookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{})
 		return errors.New("wrong market")
 	}
 
-	asks := book.Asks
-	bids := book.Bids
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		oldAsks := o.asks.Book
-		newAsks, err := updateAsks(asks, oldAsks)
-		if err != nil {
-			newAsks = oldAsks
-		}
-		o.asks.mux.Lock()
-		o.asks.Book = newAsks
-		o.asks.mux.Unlock()
-		wg.Done()
-	}()
-
-	go func() {
-		oldBids := o.bids.Book
-		newBids, err := updateBids(bids, oldBids)
-		if err != nil {
-			newBids = oldBids
-		}
-		o.bids.mux.Lock()
-		o.bids.Book = newBids
-		o.bids.mux.Unlock()
-		wg.Done()
-	}()
-	wg.Wait()
+	o.asks.Update(book.Asks)
+	o.bids.Update(book.Bids)
 
 	o.lastUpdatedTimestampBranch.mux.Lock()
 	o.lastUpdatedTimestampBranch.timestamp = book.Timestamp
@@ -265,27 +239,8 @@ func (o *OrderbookBranch) parseOrderbookSnapshotMsg(msgMap map[string]interface{
 		return errors.New("wrong market")
 	}
 
-	asks := book.Asks
-	bids := book.Bids
-	var wg sync.WaitGroup
-	wg.Add(2)
-
-	go func() {
-		sort.Slice(asks, func(i, j int) bool { return asks[i][0] < asks[j][0] })
-		o.asks.mux.Lock()
-		o.asks.Book = asks
-		o.asks.mux.Unlock()
-		wg.Done()
-	}()
-
-	go func() {
-		sort.Slice(bids, func(i, j int) bool { return bids[i][0] > bids[j][0] })
-		o.bids.mux.Lock()
-		o.bids.Book = bids
-		o.bids.mux.Unlock()
-		wg.Done()
-	}()
-	wg.Wait()
+	o.asks.Snapshot(book.Asks)
+	o.bids.Snapshot(book.Bids)
 
 	o.lastUpdatedTimestampBranch.mux.Lock()
 	o.lastUpdatedTimestampBranch.timestamp = book.Timestamp
@@ -294,107 +249,10 @@ func (o *OrderbookBranch) parseOrderbookSnapshotMsg(msgMap map[string]interface{
 	return nil
 }
 
-func updateAsks(updateAsks [][]string, oldAsks [][]string) ([][]string, error) {
-	allAsks := make([][]string, 0, len(updateAsks)+len(oldAsks))
-	bidsMap := make(map[string]string)
-	for i := 0; i < len(updateAsks); i++ {
-		price := updateAsks[i][0]
-		volume := updateAsks[i][1]
-		bidsMap[price] = volume
-	}
-
-	for i := 0; i < len(oldAsks); i++ {
-		price := oldAsks[i][0]
-		volume := oldAsks[i][1]
-		if _, ok := bidsMap[price]; !ok {
-			bidsMap[price] = volume
-		} else {
-			if volume == "0" {
-				delete(bidsMap, price)
-			} else {
-				bidsMap[price] = volume
-			}
-		}
-	}
-
-	for k, v := range bidsMap {
-		allAsks = append(allAsks, []string{k, v})
-	}
-
-	// sort them ascently
-	sort.Slice(allAsks, func(i, j int) bool {
-		pi, _ := strconv.ParseFloat(allAsks[i][0], 64)
-		pj, _ := strconv.ParseFloat(allAsks[j][0], 64)
-		return pi < pj
-	})
-
-	if len(allAsks) >= 10 {
-		allAsks = allAsks[:10]
-	}
-
-	return allAsks, nil
-}
-
-func updateBids(updateBids [][]string, oldBids [][]string) ([][]string, error) {
-	allBids := make([][]string, 0, len(updateBids)+len(oldBids))
-	bidsMap := make(map[string]string)
-	for i := 0; i < len(updateBids); i++ {
-		price := updateBids[i][0]
-		volume := updateBids[i][1]
-		bidsMap[price] = volume
-	}
-
-	for i := 0; i < len(oldBids); i++ {
-		price := oldBids[i][0]
-		volume := oldBids[i][1]
-		if _, ok := bidsMap[price]; !ok {
-			bidsMap[price] = volume
-		} else {
-			if volume == "0" {
-				delete(bidsMap, price)
-			} else {
-				bidsMap[price] = volume
-			}
-		}
-	}
-
-	for k, v := range bidsMap {
-		allBids = append(allBids, []string{k, v})
-	}
-
-	sort.Slice(allBids, func(i, j int) bool {
-		pi, _ := strconv.ParseFloat(allBids[i][0], 64)
-		pj, _ := strconv.ParseFloat(allBids[j][0], 64)
-		return pi > pj
-	})
-
-	if len(allBids) >= 10 {
-		allBids = allBids[:10]
-	}
-
-	return allBids, nil
-}
-
 func (o *OrderbookBranch) GetBids() ([][]string, bool) {
-	o.bids.mux.RLock()
-	defer o.bids.mux.RUnlock()
-
-	// if there is nothing or late for 1 minute.
-	if len(o.bids.Book) == 0 {
-		return [][]string{}, false
-	}
-	book := o.bids.Book
-	return book, true
+	return o.bids.GetAll()
 }
 
 func (o *OrderbookBranch) GetAsks() ([][]string, bool) {
-	o.asks.mux.RLock()
-	defer o.asks.mux.RUnlock()
-
-	// if there is nothing or late for 1 minute.
-	if len(o.asks.Book) == 0 {
-		return [][]string{}, false
-	}
-	book := o.asks.Book
-	return book, true
+	return o.asks.GetAll()
 }

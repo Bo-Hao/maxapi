@@ -79,6 +79,7 @@ mainloop:
 		if Mc.WsClient.OnErr {
 			break
 		}
+		time.Sleep(time.Millisecond)
 	} // end for
 
 	conn.Close()
@@ -466,6 +467,7 @@ mainloop:
 		if Mc.WsClient.OnErr {
 			break
 		}
+		time.Sleep(time.Millisecond)
 	} // end for
 
 	conn.Close()
