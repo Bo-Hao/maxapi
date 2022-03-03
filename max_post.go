@@ -276,7 +276,28 @@ func (Mc *MaxClient) PlaceLimitOrder(market string, side string, price, volume f
 
 	params := make(map[string]interface{})
 	params["price"] = fmt.Sprint(price)
-	params["ordType"] = "limit"
+	params["ord_type"] = "limit"
+	vol := fmt.Sprint(volume)
+
+	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, side, vol, params)
+	if err != nil {
+		return WsOrder{}, err
+	}
+
+	// data update
+	// local balance update
+	Mc.updateLocalBalance(market, side, price, volume, false) // false means this is a normal order
+	return WsOrder(order), nil
+}
+
+func (Mc *MaxClient) PlacePostOnlyOrder(market string, side string, price, volume float64) (WsOrder, error) {
+	/* if isEnough := Mc.checkBalanceEnoughLocal(market, side, price, volume); !isEnough {
+		return WsOrder{}, errors.New("balance is not enough for trading")
+	} */
+
+	params := make(map[string]interface{})
+	params["price"] = fmt.Sprint(price)
+	params["ord_type"] = "post_only"
 	vol := fmt.Sprint(volume)
 
 	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, side, vol, params)
@@ -369,7 +390,7 @@ func (Mc *MaxClient) PlaceMultiLimitOrders(market string, sides []string, prices
 
 func (Mc *MaxClient) PlaceMarketOrder(market string, side string, volume float64) (WsOrder, error) {
 	params := make(map[string]interface{})
-	params["ordType"] = "market"
+	params["ord_type"] = "market"
 	vol := fmt.Sprint(volume)
 	order, _, err := Mc.ApiClient.PrivateApi.PostApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, market, side, vol, params)
 	if err != nil {
