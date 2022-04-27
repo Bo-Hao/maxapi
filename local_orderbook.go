@@ -213,15 +213,19 @@ func (o *OrderbookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{})
 		return errors.New("wrong market")
 	}
 
-	wrongtime := false
+	wrongTime := false
 	o.lastUpdatedTimestampBranch.mux.Lock()
 
 	if book.Timestamp < o.lastUpdatedTimestampBranch.timestamp {
-
+		wrongTime = true
 	} else {
 		o.lastUpdatedTimestampBranch.timestamp = book.Timestamp
 	}
 	o.lastUpdatedTimestampBranch.mux.Unlock()
+
+	if wrongTime {
+		return nil
+	}
 
 	o.asks.Update(book.Asks)
 	o.bids.Update(book.Bids)
@@ -262,4 +266,9 @@ func (o *OrderbookBranch) GetBids() ([][]string, bool) {
 
 func (o *OrderbookBranch) GetAsks() ([][]string, bool) {
 	return o.asks.GetAll()
+}
+
+func (o *OrderbookBranch) Close() {
+	o.conn.Close()
+	(*o.cancel)()
 }
