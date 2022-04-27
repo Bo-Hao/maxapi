@@ -294,6 +294,7 @@ func (Mc *MaxClient) PlacePostOnlyOrder(market string, side string, price, volum
 	/* if isEnough := Mc.checkBalanceEnoughLocal(market, side, price, volume); !isEnough {
 		return WsOrder{}, errors.New("balance is not enough for trading")
 	} */
+	
 
 	params := make(map[string]interface{})
 	params["price"] = fmt.Sprint(price)

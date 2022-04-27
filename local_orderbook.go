@@ -145,7 +145,7 @@ func (o *OrderbookBranch) maintain(ctx context.Context, symbol string) {
 	o.maintain(ctx, symbol)
 }
 
-// default for the depth 10.
+// default for the depth 10 (max).
 func MaxSubscribeBookMessage(symbol string) ([]byte, error) {
 	param := make(map[string]interface{})
 	param["action"] = "sub"
@@ -213,12 +213,18 @@ func (o *OrderbookBranch) parseOrderbookUpdateMsg(msgMap map[string]interface{})
 		return errors.New("wrong market")
 	}
 
+	wrongtime := false
+	o.lastUpdatedTimestampBranch.mux.Lock()
+
+	if book.Timestamp < o.lastUpdatedTimestampBranch.timestamp {
+
+	} else {
+		o.lastUpdatedTimestampBranch.timestamp = book.Timestamp
+	}
+	o.lastUpdatedTimestampBranch.mux.Unlock()
+
 	o.asks.Update(book.Asks)
 	o.bids.Update(book.Bids)
-
-	o.lastUpdatedTimestampBranch.mux.Lock()
-	o.lastUpdatedTimestampBranch.timestamp = book.Timestamp
-	o.lastUpdatedTimestampBranch.mux.Unlock()
 
 	return nil
 }
