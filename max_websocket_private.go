@@ -482,7 +482,7 @@ mainloop:
 	Mc.WsClient.TmpBranch.Trades = Mc.ReadTrades()
 	Mc.WsClient.TmpBranch.Unlock()
 
-	Mc.PriviateWebsocket(ctx)
+	Mc.PriviateWebsocketWithChannel(ctx, tradeChan)
 }
 
 func (Mc *MaxClient) handleMaxSocketMsgWithChannel(msg []byte, tradeChan chan []Trade) error {
