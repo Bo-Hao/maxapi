@@ -497,9 +497,17 @@ func (Mc *MaxClient) GetTradeReports() ([][]string, bool) {
 		price := trade.Price
 		qty := trade.Volume
 		side := trade.Side
-		execType := ""
+
+		maker := trade.Maker
+
+		execType := "limit"
+		if !maker {
+			execType = "market"
+		}
+
 		fee := trade.Fee
 		filledQty := trade.Volume
+
 		tradeReport := []string{oid, symbol, product, subaccount, price, qty, side, execType, fee, filledQty}
 
 		tradeReports = append(tradeReports, tradeReport)
