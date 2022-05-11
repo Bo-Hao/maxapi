@@ -115,7 +115,7 @@ func (Mc *MaxClient) GetAllOrders() (map[int64]WsOrder, error) {
 		market := orders[i].Market
 
 		if NOO, ok := newOrderNumbers[strings.ToLower(market)]; !ok {
-			if strings.EqualFold(side, "bid") {
+			if strings.EqualFold(side, "buy") {
 				Mc.OrdersBranch.OrderNumbers[strings.ToLower(market)] = NumbersOfOrder{
 					NBid: 1,
 					NAsk: 0,
@@ -127,7 +127,7 @@ func (Mc *MaxClient) GetAllOrders() (map[int64]WsOrder, error) {
 				}
 			}
 		} else {
-			if strings.EqualFold(side, "bid") {
+			if strings.EqualFold(side, "buy") {
 				NOO.NBid += 1
 			} else {
 				NOO.NAsk += 1
@@ -294,7 +294,6 @@ func (Mc *MaxClient) PlacePostOnlyOrder(market string, side string, price, volum
 	/* if isEnough := Mc.checkBalanceEnoughLocal(market, side, price, volume); !isEnough {
 		return WsOrder{}, errors.New("balance is not enough for trading")
 	} */
-	
 
 	params := make(map[string]interface{})
 	params["price"] = fmt.Sprint(price)
@@ -427,3 +426,84 @@ func (Mc MaxClient) PlaceMakerOrder(market string, side string, volume float64) 
 	}
 }
 */
+
+// for modularized arbitrage framework
+// GetBalances() ([][]string, bool)     // []string{asset, available, total}
+func (Mc *MaxClient) GetBalances() (balances [][]string, ok bool) {
+	member, _, err := Mc.ApiClient.PrivateApi.GetApiV2MembersAccounts(context.Background(), Mc.apiKey, Mc.apiSecret)
+	if err != nil {
+		return [][]string{}, false
+	}
+	Accounts := member.Accounts
+	for i := 0; i < len(Accounts); i++ {
+		currency := Accounts[i].Currency
+		available, err := strconv.ParseFloat(Accounts[i].Balance, 64)
+		if err != nil {
+			available = 0
+		}
+		locked, err := strconv.ParseFloat(Accounts[i].Locked, 64)
+
+		if err != nil {
+			locked = 0
+		}
+
+		// handle the case here.
+		balances = append(balances, []string{strings.ToUpper(currency), fmt.Sprint(available), fmt.Sprint(available + locked)})
+	}
+	return balances, true
+}
+
+// GetOpenOrders() ([][]string, bool)   // []string{oid, symbol, product, subaccount, price, qty, side, execType, UnfilledQty}
+func (Mc *MaxClient) GetOpenOrders() (openOrders [][]string, ok bool) {
+	orders, _, err := Mc.ApiClient.PrivateApi.GetApiV2Orders(context.Background(), Mc.apiKey, Mc.apiSecret, "all", nil)
+	if err != nil {
+		return [][]string{}, false
+	}
+
+	for _, v := range orders {
+		// []string{oid, symbol, product, subaccount, price, qty, side, execType, unfilledQty}
+		oid := fmt.Sprint(v.Id)
+		symbol := v.Market
+		product := "spot"
+		price := v.Price
+		qty := v.Volume
+		side := v.Side
+		execType := v.OrdType
+		unfilledQty := v.RemainingVolume
+
+		openOrder := []string{oid, symbol, product, "", price, qty, side, execType, unfilledQty}
+
+		openOrders = append(openOrders, openOrder)
+	}
+
+	return openOrders, true
+
+}
+
+// GetTradeReports() ([][]string, bool) // []string{oid, symbol, product, subaccount, price, qty, side, execType, fee, filledQty}
+func (Mc *MaxClient) GetTradeReports() ([][]string, bool) {
+	Mc.TradeReportBranch.Lock()
+	trades := Mc.TradeReportBranch.TradeReports
+	Mc.TradeReportBranch.TradeReports = []Trade{}
+	Mc.TradeReportBranch.Unlock()
+
+	var tradeReports [][]string
+	for i := range trades {
+		trade := trades[i]
+		oid := ""
+		symbol := strings.ToUpper(trade.Market)
+		product := "spot"
+		subaccount := ""
+		price := trade.Price
+		qty := trade.Volume
+		side := trade.Side
+		execType := ""
+		fee := trade.Fee
+		filledQty := trade.Volume
+		tradeReport := []string{oid, symbol, product, subaccount, price, qty, side, execType, fee, filledQty}
+
+		tradeReports = append(tradeReports, tradeReport)
+	}
+
+	return tradeReports, true
+}

@@ -89,6 +89,11 @@ type MaxClient struct {
 		Balance map[string]Balance // currency balance
 		sync.RWMutex
 	}
+
+	TradeReportBranch struct {
+		TradeReports []Trade
+		sync.RWMutex
+	}
 }
 
 type ExchangeInfo struct {
