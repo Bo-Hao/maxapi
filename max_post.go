@@ -187,17 +187,27 @@ func (Mc *MaxClient) CancelAllOrders() ([]WsOrder, error) {
 	return canceledWsOrders, nil
 }
 
-func (Mc *MaxClient) CancelOrder(market string, id int64) (WsOrder, error) {
-	CanceledOrder, _, err := Mc.ApiClient.PrivateApi.PostApiV2OrderDelete(context.Background(), Mc.apiKey, Mc.apiSecret, id)
-	if err != nil {
-		return WsOrder{}, errors.New("fail to cancel order" + strconv.Itoa(int(id)))
+func (Mc *MaxClient) CancelOrder(market string, id, clientId interface{}) (wsOrder WsOrder, err error) {
+	var canceledorder Order
+	if clientId == nil && id == nil {
+		return WsOrder{}, errors.New("no order found")
+	} else if clientId == nil {
+		canceledorder, _, err = Mc.ApiClient.PrivateApi.PostApiV2OrderDelete(context.Background(), Mc.apiKey, Mc.apiSecret, id.(int64))
+		if err != nil {
+			return WsOrder{}, errors.New("fail to cancel order" + strconv.Itoa(int(id.(int64))))
+		}
+		LogInfoToDailyLogFile("Cancel Order ", id, "by CancelOrder func.")
+	} else if id == nil {
+		canceledorder, _, err = Mc.ApiClient.PrivateApi.PostApiV2OrderDeleteClientId(context.Background(), Mc.apiKey, Mc.apiSecret, clientId.(string))
+		if err != nil {
+			return WsOrder{}, errors.New("fail to cancel order" + clientId.(string))
+		}
+		LogInfoToDailyLogFile("Cancel Order with client_id ", clientId.(string), "by CancelOrder func.")
 	}
-
-	LogInfoToDailyLogFile("Cancel Order ", id, "by CancelOrder func.")
 
 	// data update
 	// local balance update
-	order := CanceledOrder
+	order := canceledorder
 	side := order.Side
 	price, err := strconv.ParseFloat(order.Price, 64)
 	if err != nil {
@@ -215,7 +225,7 @@ func (Mc *MaxClient) CancelOrder(market string, id int64) (WsOrder, error) {
 	defer Mc.FilledOrdersBranch.Unlock()
 	delete(Mc.FilledOrdersBranch.Partial, order.Id)
 
-	return WsOrder(CanceledOrder), nil
+	return WsOrder(canceledorder), nil
 }
 
 /*	"side" (string) set tp cancel only sell (asks) or buy (bids) orders

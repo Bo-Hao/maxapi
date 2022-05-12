@@ -280,6 +280,80 @@ func (a *PrivateApiService) PostApiV2OrderDelete(ctx context.Context, xMAXACCESS
 }
 
 /* PrivateApiService
+cancel an order
+* @param ctx context.Context for authentication, logging, tracing, etc.
+@param xMAXACCESSKEY access key
+@param xMAXPAYLOAD encoded payload
+@param xMAXSIGNATURE encrypted signature
+@param id unique order id
+@return Order*/
+func (a *PrivateApiService) PostApiV2OrderDeleteClientId(ctx context.Context, xMAXACCESSKEY string, xMAXSECRET string, clientId string) (Order, *http.Response, error) {
+	var (
+		localVarHTTPMethod = strings.ToUpper("Post")
+		localVarFileName   string
+		localVarFileBytes  []byte
+		successPayload     Order
+	)
+
+	// create path and map variables
+	localVarPath := a.client.cfg.BasePath + "/api/v2/order/delete"
+
+	localVarHeaderParams := make(map[string]string)
+	localVarQueryParams := url.Values{}
+	localVarFormParams := url.Values{}
+	localVarPostBody := make(map[string]interface{})
+	localVarPostBody["nonce"] = time.Now().UnixMilli()
+	localVarPostBody["path"] = "/api/v2/order/delete"
+
+	// to determine the Content-Type header
+	localVarHTTPContentTypes := []string{"application/json"}
+
+	// set Content-Type header
+	localVarHTTPContentType := selectHeaderContentType(localVarHTTPContentTypes)
+	if localVarHTTPContentType != "" {
+		localVarHeaderParams["Content-Type"] = localVarHTTPContentType
+	}
+
+	// to determine the Accept header
+	localVarHTTPHeaderAccepts := []string{
+		"application/json",
+	}
+
+	// set Accept header
+	localVarHTTPHeaderAccept := selectHeaderAccept(localVarHTTPHeaderAccepts)
+	if localVarHTTPHeaderAccept != "" {
+		localVarHeaderParams["Accept"] = localVarHTTPHeaderAccept
+	}
+
+	localVarPostBody["client_id"] = clientId
+	xMAXPAYLOAD, xMAXSIGNATURE := makePayloadAndSignature(localVarPostBody, xMAXSECRET)
+	localVarHeaderParams["X-MAX-ACCESSKEY"] = parameterToString(xMAXACCESSKEY, "")
+	localVarHeaderParams["X-MAX-PAYLOAD"] = parameterToString(xMAXPAYLOAD, "")
+	localVarHeaderParams["X-MAX-SIGNATURE"] = parameterToString(xMAXSIGNATURE, "")
+
+	r, err := a.client.prepareRequest(ctx, localVarPath, localVarHTTPMethod, localVarPostBody, localVarHeaderParams, localVarQueryParams, localVarFormParams, localVarFileName, localVarFileBytes)
+	if err != nil {
+		return successPayload, nil, err
+	}
+
+	localVarHTTPResponse, err := a.client.callAPI(r)
+	if err != nil || localVarHTTPResponse == nil {
+		return successPayload, localVarHTTPResponse, err
+	}
+	defer localVarHTTPResponse.Body.Close()
+	if localVarHTTPResponse.StatusCode >= 300 {
+		bodyBytes, _ := ioutil.ReadAll(localVarHTTPResponse.Body)
+		return successPayload, localVarHTTPResponse, reportError("Status: %v, Body: %s", localVarHTTPResponse.Status, bodyBytes)
+	}
+
+	if err = json.NewDecoder(localVarHTTPResponse.Body).Decode(&successPayload); err != nil {
+		return successPayload, localVarHTTPResponse, err
+	}
+
+	return successPayload, localVarHTTPResponse, err
+}
+
+/* PrivateApiService
 cancel all your orders with given market and side
 * @param ctx context.Context for authentication, logging, tracing, etc.
 @param xMAXACCESSKEY access key
