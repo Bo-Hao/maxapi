@@ -477,7 +477,6 @@ func (Mc *MaxClient) GetOpenOrders() (openOrders [][]string, ok bool) {
 	}
 
 	return openOrders, true
-
 }
 
 // GetTradeReports() ([][]string, bool) // []string{oid, symbol, product, subaccount, price, qty, side, execType, fee, filledQty}
